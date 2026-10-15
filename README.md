@@ -26,24 +26,24 @@ Projeto concebido e implementado no âmbito do **Programa Trilhas de Futuro** (C
 ## ⚡ Mapeamento Geral de Portas e Pinagem (Pinout Definitivo)
 
 > **NOTA TÉCNICA DE ENGENHARIA:**  
-> Todas as colisões de pinos foram eliminadas. O pino de acionamento do **Motor 1** foi alocado no **GPIO 23** e a sua respectiva **Sobrecarga Térmica** no **GPIO 19**. Todos os pinos de saída utilizam lógica push-pull de pulso de 500 ms e todas as entradas de segurança operam com resistores internos de **PULLDOWN**, evitando leituras flutuantes.
+> O mapeamento de GPIOs foi completamente redistribuído para evitar colisões entre saídas de potência e entradas de proteção. Todas as 11 portas estão isoladas e desempenham funções exclusivas. As entradas operam com resistores de **PULLDOWN**, e o pino **GPIO 12** deve iniciar obrigatoriamente em `LOW` (0V) durante o boot para assegurar a tensão correta de 3.3V na memória Flash do ESP32.
 
 ### 📌 Tabela de Atribuição dos GPIOs do ESP32
 
 | Módulo / Função | GPIO | Direção | Modo Elétrico | Nível Ativo | Descrição da Ligação Física |
 | :--- | :---: | :---: | :---: | :---: | :--- |
-| **Pulso Motor 1 (Compressor)** | **GPIO 23** | Saída | Digital OUTPUT | `HIGH` (3.3V) | Bobina do contator/relé do compressor principal (Pulso 500 ms) |
-| **Pulso Motor 2 (Ventilador)** | **GPIO 27** | Saída | Digital OUTPUT | `HIGH` (3.3V) | Bobina do contator/relé do exaustor/ventilador (Pulso 500 ms) |
-| **Pulso Motor 3 (Secador)** | **GPIO 33** | Saída | Digital OUTPUT | `HIGH` (3.3V) | Bobina do contator/relé do secador de ar (Pulso 500 ms) |
-| **Feedback Contator 1** | **GPIO 14** | Entrada | `INPUT_PULLDOWN` | `HIGH` (3.3V) | Contato auxiliar NA (93-94) do contator do compressor |
-| **Feedback Contator 2** | **GPIO 26** | Entrada | `INPUT_PULLDOWN` | `HIGH` (3.3V) | Contato auxiliar NA (93-94) do contator do ventilador |
-| **Feedback Contator 3** | **GPIO 32** | Entrada | `INPUT_PULLDOWN` | `HIGH` (3.3V) | Contato auxiliar NA (93-94) do contator do secador |
-| **Sobrecarga Motor 1** | **GPIO 19** | Entrada | `INPUT_PULLDOWN` | `HIGH` (3.3V) | Contato de alarme NA (97-98) do relé térmico bimetálico 1 |
-| **Sobrecarga Motor 2** | **GPIO 25** | Entrada | `INPUT_PULLDOWN` | `HIGH` (3.3V) | Contato de alarme NA (97-98) do relé térmico bimetálico 2 |
-| **Sobrecarga Motor 3** | **GPIO 18** | Entrada | `INPUT_PULLDOWN` | `HIGH` (3.3V) | Contato de alarme NA (97-98) do relé térmico bimetálico 3 |
-| **Pressostato de Linha** | **GPIO 17** | Entrada | `INPUT_PULLDOWN` | `HIGH` (3.3V) | Sensor de pressão mecânico de alívio e sobrepressão |
-| **Chave de Manutenção** | **GPIO 04** | Entrada | `INPUT_PULLDOWN` | `HIGH` (3.3V) | Chave física comutadora no painel frontal de comando |
-| **Serial Debug (TX0 / RX0)** | **GPIO 01 / 03**| UART | N/A | N/A | Comunicação Serial com monitor a 115200 bps |
+| **Pulso Motor 1 (Compressor)** | **GPIO 25** | Saída | Digital OUTPUT | `HIGH` (3.3V) | Bobina do relé/contator do compressor principal (Pulso 500 ms) |
+| **Pulso Motor 2 (Ventilador)** | **GPIO 27** | Saída | Digital OUTPUT | `HIGH` (3.3V) | Bobina do relé/contator do ventilador/exaustor (Pulso 500 ms) |
+| **Pulso Motor 3 (Secador)**    | **GPIO 26** | Saída | Digital OUTPUT | `HIGH` (3.3V) | Bobina do relé/contator do secador de ar (Pulso 500 ms) |
+| **Feedback Contator 1**        | **GPIO 14** | Entrada | `INPUT_PULLDOWN` | `HIGH` (3.3V) | Contato auxiliar NA (13-14) do contator do compressor |
+| **Feedback Contator 2**        | **GPIO 33** | Entrada | `INPUT_PULLDOWN` | `HIGH` (3.3V) | Contato auxiliar NA (13-14) do contator do ventilador |
+| **Feedback Contator 3**        | **GPIO 32** | Entrada | `INPUT_PULLDOWN` | `HIGH` (3.3V) | Contato auxiliar NA (13-14) do contator do secador |
+| **Sobrecarga Motor 1**         | **GPIO 19** | Entrada | `INPUT_PULLDOWN` | `HIGH` (3.3V) | Contato de alarme NA (97-98) do relé térmico do compressor |
+| **Sobrecarga Motor 2**         | **GPIO 12** | Entrada | `INPUT_PULLDOWN` | `HIGH` (3.3V) | Contato de alarme NA (97-98) do relé térmico do ventilador |
+| **Sobrecarga Motor 3**         | **GPIO 18** | Entrada | `INPUT_PULLDOWN` | `HIGH` (3.3V) | Contato de alarme NA (97-98) do relé térmico do secador |
+| **Pressostato de Linha**       | **GPIO 17** | Entrada | `INPUT_PULLDOWN` | `HIGH` (3.3V) | Sensor de pressão pneumático de segurança e alívio |
+| **Chave de Manutenção**        | **GPIO 04** | Entrada | `INPUT_PULLDOWN` | `HIGH` (3.3V) | Chave física comutadora local de manutenção no painel |
+| **Serial Debug (TX0 / RX0)**   | **GPIO 01 / 03**| UART | N/A | N/A | Comunicação e depuração serial a 115200 bps |
 
 ---
 
@@ -52,9 +52,9 @@ Projeto concebido e implementado no âmbito do **Programa Trilhas de Futuro** (C
 Para evitar a queima precoce dos enrolamentos dos compressores provocada por chaveamentos contínuos no painel ou por tentativas de partida com contrapressão no cabeçote, o sistema implementa travas de tempo diretamente no hardware:
 
 1. **Tempo Mínimo em Marcha (60 Minutos — 3600 segundos):**
-   * Ao emitir a ordem de **LIGAR**, o motor liga imediatamente via pulso de 500 ms e entra em bloqueio de desligamento por 60 minutos.
-   * Evita desligar o compressor prematuramente antes que o circuito atinja a temperatura de trabalho e ciclo de lubrificação adequados.
-   * *Exceção:* Falhas elétricas graves (sobrecarga ou pressostato) desarmam o motor no mesmo milissegundo, ignorando o timer.
+   * Ao emitir a ordem de **LIGAR**, o motor liga imediatamente via pulso de 500 ms e entra em bloqueio de desligamento manual por 60 minutos.
+   * Evita desligar o compressor antes que o circuito atinja a temperatura de trabalho e o ciclo de lubrificação adequados.
+   * *Exceção:* Falhas elétricas graves (sobrecarga térmica ou pressostato) desarmam o motor no mesmo milissegundo, sobrepondo o timer.
 
 2. **Tempo de Descanso Obrigatório (10 Minutos — 600 segundos):**
    * Ao emitir a ordem de **DESLIGAR**, o motor desliga via pulso de 500 ms e o botão fica bloqueado por 10 minutos com contagem regressiva exibida na tela.
@@ -90,12 +90,14 @@ O ESP32 opera em modo híbrido concorrente (**`WIFI_AP_STA`**), garantindo acess
 
 ### Configurações de Fábrica do Ponto de Acesso (AP)
 
+```cpp
 const char *ap_ssid     = "EnergizAR";
 const char *ap_password = "12345678";
 
 IPAddress local_ip(192, 168, 26, 7);
 IPAddress gateway(192, 168, 26, 1);
 IPAddress subnet(255, 255, 255, 0);
+```
 
 ### Gerenciador de Redes no Ar
 * **Varredura Assíncrona:** Varre redes Wi-Fi 2.4 GHz em segundo plano sem travar os motores nem o Task Watchdog.
@@ -118,7 +120,7 @@ IPAddress subnet(255, 255, 255, 0);
 │   ├── paginaserro.h           # Telas de erro HTTP (404, acesso negado)
 │   ├── pressao.h               # Telemetria pneumática e nível de óleo
 │   ├── pressostato.h           # Sensor mecânico de pressão (GPIO 17)
-│   ├── sobrecarga.h            # Proteção térmica bimetálica (GPIOs 19, 25, 18)
+│   ├── sobrecarga.h            # Proteção térmica bimetálica (GPIOs 19, 12, 18)
 │   ├── tempo.h                 # Sincronização horária com servidores NTP
 │   ├── umidade.h               # Monitor de qualidade do ar comprimido e ponto de orvalho
 │   ├── wificonexao.h           # Máquina de estados não-bloqueante do rádio Wi-Fi
@@ -149,21 +151,21 @@ IPAddress subnet(255, 255, 255, 0);
 
 ## 🔌 Diagrama Elétrico e Conexões
 
-### Esquemático do Acionamento e Proteções
+### Esquemático do Acionamento e Proteções Atualizado
 ```
                    ESP32 DEVKIT V1
               +-----------------------+
               |                       |
-(Pulso 500ms) | GPIO 23 ------> [IN1] | Módulo Relé 1 (Compressor)
+(Pulso 500ms) | GPIO 25 ------> [IN1] | Módulo Relé 1 (Compressor)
 (Pulso 500ms) | GPIO 27 ------> [IN2] | Módulo Relé 2 (Ventilador)
-(Pulso 500ms) | GPIO 33 ------> [IN3] | Módulo Relé 3 (Secador)
+(Pulso 500ms) | GPIO 26 ------> [IN3] | Módulo Relé 3 (Secador)
               |                       |
-(Feedback NA) | GPIO 14 <------ [94]  | Contato Auxiliar Contator 1 (3.3V)
-(Feedback NA) | GPIO 26 <------ [94]  | Contato Auxiliar Contator 2 (3.3V)
-(Feedback NA) | GPIO 32 <------ [94]  | Contato Auxiliar Contator 3 (3.3V)
+(Feedback NA) | GPIO 14 <------ [14]  | Contato Auxiliar Contator 1 (3.3V)
+(Feedback NA) | GPIO 33 <------ [14]  | Contato Auxiliar Contator 2 (3.3V)
+(Feedback NA) | GPIO 32 <------ [14]  | Contato Auxiliar Contator 3 (3.3V)
               |                       |
 (Sobrecarga)  | GPIO 19 <------ [98]  | Contato Falha Relé Térmico 1 (3.3V)
-(Sobrecarga)  | GPIO 25 <------ [98]  | Contato Falha Relé Térmico 2 (3.3V)
+(Sobrecarga)  | GPIO 12 <------ [98]  | Contato Falha Relé Térmico 2 (3.3V)*
 (Sobrecarga)  | GPIO 18 <------ [98]  | Contato Falha Relé Térmico 3 (3.3V)
               |                       |
 (Pressostato) | GPIO 17 <------ [P1]  | Pressostato de Linha Pneumática
@@ -172,6 +174,7 @@ IPAddress subnet(255, 255, 255, 0);
               | GND ----------> GND   | Barramento Comum de Terra
               | 3V3 ----------> +3.3V | Barramento de Alimentação de Sinal
               +-----------------------+
+* Nota: GPIO 12 deve iniciar em 0V (LOW) durante a energização da placa.
 ```
 
 ---
@@ -231,6 +234,9 @@ pio device monitor
 | `/scanstatus`| `GET` | Retorna as redes encontradas no ar com RSSI | Array JSON contendo SSIDs e sinais (dBm) |
 | `/salvarwifi`| `POST` | Grava novas credenciais no arquivo `/wifiredes.txt` | JSON confirmando início da conexão |
 | `/excluirwifi`| `GET` | Remove uma rede gravada na Flash (`?ssid=Rede`) | Retorno de confirmação |
+
+---
+
 ## 📄 Licença
 
 Este projeto é disponibilizado sob a licença **MIT**. Consulte o arquivo [LICENSE](LICENSE) para mais informações.
