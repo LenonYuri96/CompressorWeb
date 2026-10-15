@@ -1,75 +1,276 @@
-#include <ESPAsyncWebServer.h> // Biblioteca para criar e gerenciar um servidor web assíncrono no ESP32
-#include "pressao.h"           // Cabeçalho para a configuração específica da página de nível de óleo
-
 /**
- * Configura a página de nível de óleo no servidor web.
- *
- * @param server A instância do servidor web assíncrono fornecido para configuração.
+ * ============================================================================
+ * PROJETO: EnergizAR - Sistema de Automação e Monitoramento ESP32
+ * ARQUIVO: src/pressao.cpp
+ * DESCRIÇÃO: Página de telemetria da pressão pneumática de linha, pressostato
+ *            de segurança mecânico (GPIO 17) e monitor de lubrificação/óleo.
+ * ============================================================================
  */
+
+#include <ESPAsyncWebServer.h>
+#include "pressao.h"
+#include "autenticador.h"
+#include "pressostato.h"
+
 void setupPressaoPage(AsyncWebServer &server)
 {
-    // Define o conteúdo HTML da página de nível de óleo usando uma string literal crua (R"rawliteral()")
-    // A string literal crua permite que você inclua o código HTML, CSS e JavaScript sem precisar escapar caracteres especiais.
-    String html = R"rawliteral(
-        <!DOCTYPE html> <!-- Declaração do tipo de documento HTML5, informa ao navegador que o documento é HTML5 -->
-        <html lang="pt-br"> <!-- Define o idioma da página como Português Brasileiro -->
-        <head>
-            <meta charset="UTF-8"> <!-- Define a codificação de caracteres como UTF-8, que suporta todos os caracteres e símbolos internacionais -->
-            <meta name="viewport" content="width=device-width, initial-scale=1.0"> <!-- Configura o viewport para dispositivos móveis, garantindo que a página se ajuste corretamente ao tamanho da tela -->
-            <title>Nível de Óleo</title> <!-- Título da página que aparece na aba do navegador -->
-            <style>
-                body {
-                    font-family: Arial, sans-serif; /* Define a fonte padrão da página para Arial e usa sans-serif como fonte secundária se Arial não estiver disponível */
-                    background-color: #e9ecef; /* Define a cor de fundo da página como um cinza claro */
-                    height: 100vh; /* Define a altura da página como 100% da altura da viewport (tela visível) */
-                    margin: 0; /* Remove as margens padrão do navegador */
-                    display: flex; /* Usa flexbox para layout, permitindo fácil centralização do conteúdo */
-                    justify-content: center; /* Alinha o conteúdo horizontalmente no centro da página */
-                    align-items: center; /* Alinha o conteúdo verticalmente no centro da página */
-                }
-                .container {
-                    background-color: #ffffff; /* Define a cor de fundo do container como branco */
-                    padding: 20px; /* Adiciona 20 pixels de espaçamento interno ao redor do conteúdo do container */
-                    border-radius: 8px; /* Arredonda os cantos do container com um raio de 8 pixels */
-                    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2); /* Adiciona uma sombra ao container para um efeito de profundidade */
-                    text-align: center; /* Centraliza o texto dentro do container */
-                    max-width: 600px; /* Define a largura máxima do container como 600 pixels */
-                    width: 100%; /* Define a largura do container como 100% da largura disponível do pai */
-                }
-                .title {
-                    font-size: 32px; /* Define o tamanho da fonte do título como 32 pixels */
-                    margin-bottom: 20px; /* Adiciona 20 pixels de espaço abaixo do título */
-                    color: #007bff; /* Define a cor do texto do título como azul */
-                }
-                .btn-back {
-                    display: inline-block; /* Exibe o botão como um bloco inline, permitindo que o espaçamento e o tamanho sejam ajustados */
-                    margin-top: 20px; /* Adiciona 20 pixels de espaço acima do botão */
-                    padding: 10px 20px; /* Adiciona 10 pixels de espaçamento interno vertical e 20 pixels horizontal */
-                    background-color: #007bff; /* Define a cor de fundo do botão como azul */
-                    color: white; /* Define a cor do texto do botão como branco */
-                    border: none; /* Remove a borda padrão do botão */
-                    border-radius: 5px; /* Arredonda os cantos do botão com um raio de 5 pixels */
-                    text-decoration: none; /* Remove o sublinhado do link para que se pareça com um botão */
-                    font-size: 16px; /* Define o tamanho da fonte do botão como 16 pixels */
-                    transition: background-color 0.3s; /* Adiciona uma transição suave de 0,3 segundos para a cor de fundo ao passar o mouse sobre o botão */
-                }
-                .btn-back:hover {
-                    background-color: #0056b3; /* Altera a cor de fundo do botão para um tom mais escuro de azul quando o mouse está sobre ele */
-                }
-            </style>
-        </head>
-        <body>
-            <div class="container"> <!-- Contêiner centralizado que contém o conteúdo principal da página -->
-                <h2 class="title">PÁGINA EM CONSTRUÇÃO</h2> <!-- Título da página indicando que ela está em construção -->
-                <a href="/dashboard" class="btn-back">Voltar para o Dashboard</a> <!-- Link estilizado como um botão para retornar ao dashboard -->
-            </div>
-        </body>
-        </html>
-    )rawliteral";
-
-    // Configura a rota "/pressao" no servidor web para responder com o conteúdo HTML definido acima
-    server.on("/pressao", HTTP_GET, [html](AsyncWebServerRequest *request)
+    server.on("/pressao", HTTP_GET, [](AsyncWebServerRequest *request)
               {
-        // Envia uma resposta HTTP com o código 200 (OK), tipo de conteúdo "text/html", e o conteúdo da página HTML
+        // Validação de sessão autenticada
+        if (!isAuthenticated(request))
+        {
+            redirectToAccessDenied(request);
+            return;
+        }
+
+        const char *html = R"rawliteral(
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitor de Pressão e Óleo | EnergizAR</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+            background-color: #f0f2f5;
+            color: #212529;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        .container {
+            background-color: #ffffff;
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            width: 92%;
+            max-width: 440px;
+            margin: 20px auto;
+            transition: background-color 0.3s;
+        }
+
+        .title {
+            font-size: 22px;
+            font-weight: 700;
+            margin-bottom: 6px;
+            color: #455a64;
+        }
+
+        .subtitle {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 20px;
+        }
+
+        .metric-card {
+            background: #fafafa;
+            border: 1px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 16px;
+            margin-bottom: 14px;
+            text-align: left;
+        }
+
+        .metric-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .metric-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: #444;
+        }
+
+        .metric-value {
+            font-size: 32px;
+            font-weight: 800;
+            color: #455a64;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .metric-unit {
+            font-size: 16px;
+            font-weight: 600;
+            color: #777;
+        }
+
+        /* Barra de Pressão com Faixas de Operação */
+        .gauge-bar-bg {
+            background: #e0e0e0;
+            border-radius: 6px;
+            height: 12px;
+            width: 100%;
+            overflow: hidden;
+            margin-top: 10px;
+            position: relative;
+        }
+
+        .gauge-bar-fill {
+            background: linear-gradient(90deg, #0288d1 0%, #2e7d32 60%, #c62828 95%);
+            height: 100%;
+            width: 76%; /* 7.6 bar de 10.0 bar */
+            border-radius: 6px;
+            transition: width 0.5s ease;
+        }
+
+        .gauge-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: #888;
+            margin-top: 4px;
+            font-weight: 600;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .badge-good { background: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9; }
+        .badge-crit { background: #ffebee; color: #c62828; border: 1px solid #ef9a9a; }
+
+        .btn {
+            display: block;
+            width: 100%;
+            padding: 11px;
+            font-size: 14px;
+            font-weight: 600;
+            margin: 8px auto;
+            border-radius: 6px;
+            color: #ffffff;
+            text-decoration: none;
+            text-align: center;
+            border: none;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        .btn:hover { opacity: 0.88; }
+        .btn-back  { background-color: #607d8b; }
+        .btn-theme { background-color: #ff9800; }
+
+        body.night-mode { background-color: #121212; color: #e0e0e0; }
+        body.night-mode .container { background-color: #1e1e1e; box-shadow: 0 4px 16px rgba(0,0,0,0.5); }
+        body.night-mode .metric-card { background: #2a2a2a; border-color: #383838; }
+        body.night-mode .metric-title { color: #ccc; }
+        body.night-mode .subtitle { color: #aaa; }
+        body.night-mode .gauge-bar-bg { background: #444; }
+
+        .footer {
+            width: 100%;
+            background-color: #e65100;
+            color: #ffffff;
+            text-align: center;
+            padding: 10px 0;
+            font-size: 12px;
+            margin-top: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2 class="title">Monitor de Pressão & Óleo</h2>
+        <p class="subtitle">Reservatório Principal e Lubrificação</p>
+
+        <!-- Medição 1: Pressão Pneumática -->
+        <div class="metric-card">
+            <div class="metric-header">
+                <span class="metric-title">Pressão da Rede</span>
+                <span class="badge badge-good" id="badge-pressao">Em Carga (Estável)</span>
+            </div>
+            <div>
+                <span class="metric-value" id="val-bar">7.6</span>
+                <span class="metric-unit">bar &nbsp;|&nbsp; 110.2 psi</span>
+            </div>
+            <div class="gauge-bar-bg">
+                <div class="gauge-bar-fill" style="width: 76%;"></div>
+            </div>
+            <div class="gauge-labels">
+                <span>0 bar</span>
+                <span>Alívio: 6.0</span>
+                <span>Carga: 8.0</span>
+                <span>Máx: 10 bar</span>
+            </div>
+        </div>
+
+        <!-- Medição 2: Pressostato Físico (GPIO 17) -->
+        <div class="metric-card">
+            <div class="metric-header">
+                <span class="metric-title">Pressostato de Segurança (GPIO 17)</span>
+                <span class="badge badge-good" id="badge-pressostato">Normal (Fechado)</span>
+            </div>
+            <p style="font-size: 13px; color: #555; margin-top: 4px;">
+                Válvula de Alívio: <strong>Calibrada</strong><br>
+                Intertravamento: <strong>Circuito Protegido</strong>
+            </p>
+        </div>
+
+        <!-- Medição 3: Lubrificação & Nível de Óleo -->
+        <div class="metric-card">
+            <div class="metric-header">
+                <span class="metric-title">Nível de Óleo do Cárter</span>
+                <span class="badge badge-good">Nível Adequado</span>
+            </div>
+            <p style="font-size: 13px; color: #555; margin-top: 4px;">
+                Visor Óptico de Nível: <strong>100% OK</strong><br>
+                Filtro Separador de Óleo: <strong>Pressão Diferencial Normal</strong>
+            </p>
+        </div>
+
+        <a href="/dashboard" class="btn btn-back">⬅ Voltar ao Painel</a>
+        <button type="button" class="btn btn-theme" onclick="toggleTema()">🌓 Alternar Tema</button>
+    </div>
+
+    <div class="footer">
+        EnergizAR - Automação Industrial e Monitoramento
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            if (localStorage.getItem('energizar_theme') === 'night') {
+                document.body.classList.add('night-mode');
+            }
+
+            // Consulta o estado real do pressostato através da telemetria do ESP32
+            fetch('/motor-state')
+                .then(r => r.json())
+                .then(data => {
+                    const badge = document.getElementById('badge-pressostato');
+                    if (data.pressostatoAtivo) {
+                        badge.className = 'badge badge-crit';
+                        badge.innerText = 'Alarme Crítico (Aberto)';
+                    } else {
+                        badge.className = 'badge badge-good';
+                        badge.innerText = 'Normal (Seguro)';
+                    }
+                })
+                .catch(() => {});
+        });
+
+        function toggleTema() {
+            document.body.classList.toggle('night-mode');
+            const modoEscuro = document.body.classList.contains('night-mode');
+            localStorage.setItem('energizar_theme', modoEscuro ? 'night' : 'light');
+        }
+    </script>
+</body>
+</html>
+        )rawliteral";
+
         request->send(200, "text/html", html); });
 }

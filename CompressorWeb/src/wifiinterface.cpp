@@ -1,475 +1,617 @@
+/**
+ * ============================================================================
+ * PROJETO: EnergizAR - Sistema de Automação e Monitoramento ESP32
+ * ARQUIVO: src/wifiinterface.cpp
+ * DESCRIÇÃO: Gera a página HTML/CSS/JavaScript responsiva para configuração e
+ *            gerenciamento das redes Wi-Fi. Exibe o IP da rede externa (STA)
+ *            e do modo AP em tempo real, varredura no ar com seleção por clique,
+ *            persistência no SPIFFS e modos de alto contraste e noturno.
+ * ============================================================================
+ */
+
+#include "wifiinterface.h"
+
 // -------------------------------------------------------------------------
-// Função que retorna o conteúdo HTML para a página de gerenciamento Wi-Fi
+// Função: getWiFiManagementPage
+// Retorno: Ponteiro para string literal em Flash (PROGMEM) contendo todo o HTML.
+// Finalidade: Servir o portal de rede sem alocar memória RAM extra.
 // -------------------------------------------------------------------------
 const char *getWiFiManagementPage()
 {
-    // Retorna um literal de string em C++, que contém o HTML, CSS e JavaScript
-    // A função retorna um ponteiro constante para char, que aponta para a string HTML.
-    // -------------------------------------------------------------------------
-    // Início do conteúdo HTML
-    // -------------------------------------------------------------------------
     return R"rawliteral(
 <!DOCTYPE html>
 <html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerenciamento Wi-Fi | EnergizAR</title>
+    
+    <style>
+        /* -----------------------------------------------------------------
+           1. ESTILOS GERAIS E RESET CSS
+           ----------------------------------------------------------------- */
+        * { 
+            box-sizing: border-box; 
+            margin: 0; 
+            padding: 0; 
+        }
 
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <link rel="preconnect" href="https://fonts.googleapis.com">
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-        <link
-            href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap"
-            rel="stylesheet">
-        <title>Gerenciamento Wi-Fi</title>
-        <style>
-/* Estilos gerais para o corpo da página */
-body {
-    font-family: Arial, sans-serif;
-    background-color: #f0f2f5;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: space-between;
-    min-height: 100vh; /* Garante que o conteúdo ocupe pelo menos 100% da altura da viewport */
-    margin: 0;
-    padding: 0;
-}
-    
-            /* Modo noturno */
-            body.night-mode {
-                background-color: #121212;
-                color: #c7c7c7;
-            }
-    
-            /* Modo alto contraste */
-            body.high-contrast {
-                background-color: #000;
-                color: #ffffff;
-            }
-    
-            .container {
-    background-color: #ffffff;
-    padding: 20px;
-    border-radius: 8px;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-    text-align: center;
-    width: 100%;
-    max-width: 400px;
-    margin: auto; /* Garante que o conteúdo fique centralizado */
-                    }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #f0f2f5;
+            color: #212529;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+        }
 
-              .title-container{
-                font-size: 24px;
-                font-family: "Playfair Display", serif;
-                margin-bottom: 20px;
-                background-image: linear-gradient(to bottom, rgb(255, 221, 0), rgba(246, 15, 15, 0.975), rgb(249, 216, 28));
-                background-clip: text;
-                -webkit-background-clip: text; 
-                -webkit-text-fill-color: transparent;
-                color: rgb(242, 95, 22);
-                font-weight: bold;    
-              }
-    
-            /* Estilos para o container em modo noturno */
-            body.night-mode .container {
-                background-color: #292929;
-                color: #e0e0e0;
-            }
-    
-            /* Estilos para o container em modo alto contraste */
-            body.high-contrast .container {
-                background-color: #000000;
-                color: #ffffff;
-            }
-    
-/* Estilos para o rodapé */
-.footer {
-    width: 100%;
-    background-color: #ee641a;
-    color: white;
-    text-align: center;
-    padding: 10px 0;
-    font-size: 14px;
-    margin-top: auto; /* Mantém o rodapé no final da página sem fixá-lo */
-}
+        /* -----------------------------------------------------------------
+           2. TEMAS DE ACESSIBILIDADE (MODO NOTURNO E ALTO CONTRASTE)
+           ----------------------------------------------------------------- */
+        body.night-mode { 
+            background-color: #121212; 
+            color: #e0e0e0; 
+        }
 
-                /* Mensagens de status */
-            #message {
-                margin: 10px 0;
-                font-size: 16px;
-            }
-    
-            .alert {
-                padding: 15px;
-                border-radius: 4px;
-                margin-top: 10px;
-                display: inline-block;
-            }
-    
-            /* Estilos para alertas de sucesso e erro */
-            .alert-success {
-                background-color: #d4edda;
-                color: #155724;
-                border: 1px solid #c3e6cb;
-            }
-    
-            .alert-danger {
-                background-color: #f8d7da;
-                color: #721c24;
-                border: 1px solid #f5c6cb;
-            }
-    
-            /* Campos de formulário */
-            .form-group {
-                margin-bottom: 15px;
-            }
-    
-            .form-group label {
-                display: block;
-                margin-bottom: 5px;
-                font-weight: bold;
-            }
-    
-            .form-group input {
-                width: 93%;
-                padding: 10px;
-                border: 1px solid #ddd;
-                border-radius: 4px;
-            }
-    
-            /* Estilos para o fundo dos inputs em modo noturno e alto contraste */
-            body.night-mode .form-group input,
-            body.high-contrast .form-group input {
-                background-color: #333;
-                color: #fff;
-                border-color: #555;
-            }
-    
-            /* Botões com cores diferenciadas */
-            .btn {
-                padding: 10px 20px;
-                border: none;
-                border-radius: 4px;
-                color: white;
-                text-align: center;
-                font-size: 16px;
-                cursor: pointer;
-                text-decoration: none;
-                transition: background-color 0.3s, transform 0.3s;
-                display: block;  /* Altera para display em bloco */
-                width: 100%;     /* Ocupa 100% da largura */
-                margin-bottom: 10px;
-            }
-    
-            /* Cores exclusivas para cada botão */
-            .btn-success {
-              width: 100%;
-              height: 38px;
-              border: none;
-              outline: none;
-              color: #fff;
-              background: #111;
-              cursor: pointer;
-              position: relative;
-              z-index: 0;
-              border-radius: 5px;
-          }
-          
-          .btn-success:before {
-              content: '';
-              background: linear-gradient(45deg, #ff0000, #ff7300, #fffb00, #48ff00, #00ffd5, #002bff, #7a00ff, #ff00c8, #ff0000);
-              position: absolute;
-              top: -2px;
-              left:-2px;
-              background-size: 600%;
-              z-index: -1;
-              filter: blur(7px);
-              width: calc(100% + 4px);
-              height: calc(100% + 4px);
-              animation: glowing 20s linear infinite;
-              opacity: 0;
-              transition: opacity .3s ease-in-out;
-              border-radius: 10px;
-          }
-          
-          .btn-success:active {
-              color: #ffffff;
-              font-weight: bold;
-          }
-          
-          .btn-success:active:after {
-              background: transparent;
-          }
-          
-          .btn-success:hover:before {
-              opacity: 1;
-          }
-          
-          .btn-success:after {
-              z-index: -1;
-              content: '';
-              position: absolute;
-              width: 100%;
-              height: 100%;
-              background: #111;
-              left: 0;
-              top: 0;
-              border-radius: 10px;
-          }
-          
-          @keyframes glowing {
-              0% { background-position: 0 0; }
-              50% { background-position: 400% 0; }
-              100% { background-position: 0 0; }
-          }
-  
-            .btn-blue {
-                background-color: #007bff; /* Azul */
-            }
-    
-            .btn-blue:hover {
-                background-color: #0056b3;
-            }
-    
-            .btn-custom-danger {
-                background-color: #dc3545; /* Vermelho */
-                width: 90%;
-            }
-    
-            .btn-custom-danger:hover {
-                background-color: #c82333;
-            }
-    
-            .btn-night-mode {
-              background-color: rgb(234, 161, 15); /* Roxo */
-            }
-    
-            .btn-night-mode:hover {
-              background-color: #8e5204;
-              transform: scale(1.05);
-              }
-    
-            .btn-contrast-mode {
-              background-color: rgb(247, 214, 49); /* Rosa */
-            }
-    
-            .btn-contrast-mode:hover {
-              background-color: #8c7807;
-              transform: scale(1.05);
-              }
-    
-            /* Grupo de inputs */
-            .input-group {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-            }
-    
-            .input-group-append {
-                margin-left: -1px;
-            }
-    
-            .input-group-append button {
-                padding: 10px;
-                border: 1px solid #ddd;
-                border-radius: 4px;
-                background-color: #f4f4f4;
-                cursor: pointer;
-            }
-    
-            .input-group-append button:hover {
-                background-color: #e2e2e2;
-            }
-    
-            /* Redes salvas */
-            #saved-networks {
-                max-height: 300px;
-                overflow-y: auto;
-                margin-top: 20px;
-                text-align: left;
-            }
-        </style>
-    </head>
+        body.high-contrast { 
+            background-color: #000000; 
+            color: #ffffff; 
+        }
 
-    <body>
-        <div class="container" aria-label="Gerenciamento de Redes Wi-Fi">
-            <h2 class="title-container">Gerenciamento de Redes Wi-Fi</h2>
-            <p id="connected-ip" aria-live="polite">Aguardando IP...</p>
-            <form id="save-form" action="/salvarwifi" method="post"
-                aria-label="Formulário de rede Wi-Fi">
-                <div class="form-group">
-                    <label for="ssid">SSID da Rede Wi-Fi:</label>
-                    <input type="text" id="ssid" name="ssid"
-                        placeholder="Digite o SSID" required
-                        aria-required="true">
-                </div>
+        .container {
+            background-color: #ffffff;
+            width: 100%;
+            max-width: 440px;
+            padding: 24px;
+            margin: 20px auto;
+            border-radius: 12px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+        }
 
-                <div class="form-group">
-                    <label for="password">Senha:</label>
-                    <div class="input-group">
-                        <input type="password" id="password" name="password"
-                            placeholder="Digite a senha" required
-                            aria-required="true">
-                        <div class="input-group-append">
-                            <button type="button" id="toggle-password"
-                                aria-label="Mostrar senha">Mostrar</button>
-                        </div>
-                    </div>
-                </div>
+        body.night-mode .container { 
+            background-color: #1e1e1e; 
+            box-shadow: 0 4px 16px rgba(0,0,0,0.4); 
+        }
 
-                <button type="submit" class="btn btn-success"
-                    aria-label="Conectar">Conectar</button>
-                <button type="button" onclick="window.history.back()"
-                    class="btn btn-blue" aria-label="Voltar">Voltar</button>
-                <!-- Botões de alternância para modo noturno e alto contraste -->
-                <button id="toggle-night-mode" class="btn btn-night-mode"
-                    aria-label="Alternar modo noturno">Modo Noturno</button>
-                <button id="toggle-contrast-mode" class="btn btn-contrast-mode"
-                    aria-label="Alternar modo alto contraste">Modo Alto
-                    Contraste</button>
-            </form>
+        body.high-contrast .container { 
+            background-color: #000000; 
+            border: 2px solid #ffffff; 
+        }
 
-            <hr>
+        .title {
+            font-size: 22px;
+            font-weight: 700;
+            text-align: center;
+            margin-bottom: 12px;
+            color: #e65100;
+        }
 
-            <div id="saved-networks" aria-label="Redes Wi-Fi Salvas">Aguardando
-                redes salvas...</div>
-            <div id="message" class="alert" role="alert"></div>
+        /* -----------------------------------------------------------------
+           PAINEL DE ENDEREÇAMENTO IP (REDE EXTERNA E AP)
+           ----------------------------------------------------------------- */
+        .ip-panel {
+            background: #fafafa;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 10px 14px;
+            margin-bottom: 16px;
+            text-align: left;
+            font-size: 13px;
+        }
+
+        body.night-mode .ip-panel {
+            background: #262626;
+            border-color: #404040;
+        }
+
+        .ip-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 4px 0;
+        }
+
+        .ip-row strong {
+            color: #555;
+        }
+
+        body.night-mode .ip-row strong {
+            color: #bbb;
+        }
+
+        .ip-value {
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .ip-sta-online {
+            color: #2e7d32;
+        }
+
+        .ip-sta-offline {
+            color: #d32f2f;
+            font-weight: 600;
+        }
+
+        .ip-ap-val {
+            color: #0288d1;
+        }
+
+        .section-title {
+            font-size: 14px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin: 16px 0 8px 0;
+            color: #616161;
+        }
+
+        body.night-mode .section-title { 
+            color: #aaaaaa; 
+        }
+
+        /* -----------------------------------------------------------------
+           3. LISTA DE ESCANEAMENTO DE REDES NO AR
+           ----------------------------------------------------------------- */
+        .scan-box {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            max-height: 180px;
+            overflow-y: auto;
+            background: #fafafa;
+            margin-bottom: 15px;
+        }
+
+        body.night-mode .scan-box { 
+            background: #2a2a2a; 
+            border-color: #444444; 
+        }
+
+        .network-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 14px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        body.night-mode .network-item { 
+            border-color: #383838; 
+        }
+
+        .network-item:hover { 
+            background-color: #ffe0b2; 
+        }
+
+        body.night-mode .network-item:hover { 
+            background-color: #424242; 
+        }
+
+        .network-name {
+            font-size: 14px;
+            font-weight: 600;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            max-width: 250px;
+        }
+
+        .network-signal {
+            font-size: 12px;
+            color: #757575;
+            font-weight: 500;
+        }
+
+        .empty-hint {
+            padding: 16px;
+            text-align: center;
+            font-size: 13px;
+            color: #888888;
+        }
+
+        /* -----------------------------------------------------------------
+           4. CAMPOS DO FORMULÁRIO DE ENTRADA
+           ----------------------------------------------------------------- */
+        .form-group {
+            margin-bottom: 12px;
+            text-align: left;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 10px 12px;
+            font-size: 14px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            background: #fff;
+            color: inherit;
+        }
+
+        body.night-mode .form-group input { 
+            background: #2d2d2d; 
+            border-color: #555555; 
+        }
+
+        .pwd-group {
+            position: relative;
+            display: flex;
+        }
+
+        .pwd-group input { 
+            padding-right: 70px; 
+        }
+
+        .pwd-btn {
+            position: absolute;
+            right: 4px;
+            top: 4px;
+            bottom: 4px;
+            padding: 0 10px;
+            background: #eee;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            color: #333;
+        }
+
+        body.night-mode .pwd-btn { 
+            background: #444444; 
+            color: #eeeeee; 
+        }
+
+        /* -----------------------------------------------------------------
+           5. BOTÕES DE AÇÃO DO SISTEMA
+           ----------------------------------------------------------------- */
+        .btn {
+            width: 100%;
+            padding: 11px;
+            font-size: 14px;
+            font-weight: 600;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-top: 8px;
+            transition: opacity 0.2s;
+        }
+
+        .btn:active { 
+            opacity: 0.8; 
+        }
+
+        .btn-scan    { background-color: #0288d1; color: #fff; }
+        .btn-connect { background-color: #2e7d32; color: #fff; }
+        .btn-back    { background-color: #607d8b; color: #fff; }
+        .btn-theme   { background-color: #ff9800; color: #fff; }
+
+        .alert {
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 13px;
+            text-align: center;
+            margin-top: 10px;
+            display: none;
+        }
+
+        .alert-success { background: #d4edda; color: #155724; display: block; }
+        .alert-error   { background: #f8d7da; color: #721c24; display: block; }
+        .alert-info    { background: #e3f2fd; color: #0d47a1; display: block; }
+
+        #saved-list {
+            margin-top: 10px;
+            font-size: 13px;
+        }
+
+        .saved-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px dotted #ccc;
+        }
+
+        .del-link {
+            color: #d32f2f;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 12px;
+            padding: 4px 8px;
+            border: 1px solid #d32f2f;
+            border-radius: 4px;
+        }
+
+        .footer {
+            width: 100%;
+            background: #e65100;
+            color: #fff;
+            text-align: center;
+            font-size: 12px;
+            padding: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2 class="title">Gerenciador Wi-Fi</h2>
+
+        <!-- PAINEL DE ENDEREÇAMENTO EM TEMPO REAL -->
+        <div class="ip-panel">
+            <div class="ip-row">
+                <strong>Wi-Fi da Empresa/Oficina:</strong>
+                <span id="sta-ip" class="ip-value ip-sta-offline">Desconectado</span>
+            </div>
+            <div class="ip-row" id="sta-ssid-row" style="display:none;">
+                <strong>Rede Conectada:</strong>
+                <span id="sta-ssid" class="ip-value" style="color:#2e7d32;">-</span>
+            </div>
+            <div class="ip-row">
+                <strong>Ponto de Acesso (AP):</strong>
+                <span id="ap-ip" class="ip-value ip-ap-val">192.168.26.7</span>
+            </div>
         </div>
 
-        <div class="footer" aria-label="Rodapé">
-            <p>Aplicação desenvolvida pela Turma de Informática Para Internet
-                Trilhas de Futuro 2024</p>
-            <p>Instrutor: Lenon Yuri</p>
+        <!-- SEÇÃO: Varredura de redes no ar -->
+        <div class="section-title">Redes Próximas Detectadas</div>
+        <button type="button" id="btn-scan" class="btn btn-scan" onclick="iniciarVarredura()">🔍 Escanear Redes Wi-Fi</button>
+        <div id="scan-box" class="scan-box" style="margin-top: 8px;">
+            <div id="scan-hint" class="empty-hint">Clique em "Escanear Redes Wi-Fi" para buscar.</div>
         </div>
-        <script>
-        // Função para buscar as redes Wi-Fi salvas e exibir na página
-        function fetchSavedNetworks() {
-            // Faz uma requisição para o servidor na rota /listadewifi
-            fetch('/listadewifi')
-                .then(response => {
-                    // Verifica se a resposta é válida
-                    if (!response.ok) {
-                        throw new Error('Network response was not ok');
+
+        <!-- FORMULÁRIO: Conexão e armazenamento das credenciais -->
+        <form id="form-wifi" onsubmit="salvarConectar(event)">
+            <div class="form-group">
+                <label for="ssid">Nome da Rede (SSID):</label>
+                <input type="text" id="ssid" name="ssid" placeholder="Selecione acima ou digite" required>
+            </div>
+            <div class="form-group">
+                <label for="password">Senha:</label>
+                <div class="pwd-group">
+                    <input type="password" id="password" name="password" placeholder="Digite a senha da rede">
+                    <button type="button" class="pwd-btn" onclick="toggleSenha()">Ver</button>
+                </div>
+            </div>
+            <button type="submit" id="btn-submit" class="btn btn-connect">💾 Salvar e Conectar</button>
+        </form>
+
+        <!-- Mensagens de confirmação ou erro de conexão -->
+        <div id="msg" class="alert"></div>
+
+        <!-- SEÇÃO: Redes salvas na memória interna SPIFFS -->
+        <div class="section-title">Redes Salvas na Memória</div>
+        <div id="saved-list">Carregando redes salvas...</div>
+
+        <!-- Botões de navegação e acessibilidade -->
+        <button type="button" onclick="window.history.back()" class="btn btn-back">⬅ Voltar ao Painel</button>
+        <button type="button" onclick="toggleTema()" class="btn btn-theme">🌓 Alternar Tema</button>
+    </div>
+
+    <div class="footer">
+        EnergizAR - Automação Industrial e Monitoramento
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            atualizarIP();
+            listarRedesSalvas();
+            // Polling continuo a cada 3 segundos para detectar quando o roteador atribuir o IP
+            setInterval(atualizarIP, 3000);
+        });
+
+        /**
+         * Consulta o IP atual (STA e AP) diretamente do ESP32
+         */
+        function atualizarIP() {
+            fetch('/ipdarede')
+                .then(r => r.json())
+                .then(d => {
+                    const staIpEl = document.getElementById('sta-ip');
+                    const staSsidRow = document.getElementById('sta-ssid-row');
+                    const staSsidEl = document.getElementById('sta-ssid');
+                    const apIpEl = document.getElementById('ap-ip');
+
+                    // Atualiza IP do Modo AP
+                    if (d.ip_ap) {
+                        apIpEl.innerText = d.ip_ap;
                     }
-                    // Retorna o texto da resposta (lista de redes Wi-Fi salvas)
-                    return response.text();
-                })
-                .then(data => {
-                    // Obtém o contêiner para exibir as redes salvas
-                    var savedNetworks = document.getElementById('saved-networks');
-                    savedNetworks.innerHTML = '';
-                    // Divide os dados recebidos por linhas (cada linha representa uma rede)
-                    var networks = data.trim().split('\n');
-                    // Verifica se há redes salvas
-                    if (networks.length > 0 && networks[0] !== "") {
-                        // Para cada rede salva, adiciona um elemento HTML com o SSID e um botão para excluir
-                        networks.forEach(network => {
-                            var parts = network.split(',');
-                            savedNetworks.innerHTML += '<p><strong>SSID:</strong> ' + parts[0] + ' <a class="btn btn-custom-danger" href="/excluirwifi?ssid=' + encodeURIComponent(parts[0]) + '">Excluir</a></p>';
-                        });
+
+                    // Determina se a Estação (STA) obteve IP na rede externa
+                    const ipExterno = d.ip_sta || (d.ip !== "192.168.26.7" && d.ip !== "0.0.0.0" ? d.ip : "");
+                    const conectado = (d.conectado === true) || (ipExterno && ipExterno.length > 7);
+
+                    if (conectado && ipExterno) {
+                        staIpEl.className = "ip-value ip-sta-online";
+                        staIpEl.innerHTML = `<a href="http://${ipExterno}" target="_blank" style="color:#2e7d32; text-decoration:underline;">${ipExterno}</a>`;
+                        
+                        if (d.ssid && d.ssid.length > 0) {
+                            staSsidRow.style.display = "flex";
+                            staSsidEl.innerText = d.ssid;
+                        }
                     } else {
-                        // Se não houver redes salvas, exibe uma mensagem apropriada
-                        savedNetworks.innerHTML = '<p>Nenhuma rede salva encontrada.</p>';
+                        staIpEl.className = "ip-value ip-sta-offline";
+                        staIpEl.innerText = "Desconectado";
+                        staSsidRow.style.display = "none";
                     }
                 })
-                .catch(error => {
-                    // Lida com erros de requisição
-                    console.error('Erro ao buscar as redes salvas:', error);
-                    var savedNetworks = document.getElementById('saved-networks');
-                    savedNetworks.innerHTML = '<p>Erro ao buscar redes salvas.</p>';
+                .catch(() => {});
+        }
+
+        /**
+         * Dispara a varredura assíncrona no rádio do ESP32
+         */
+        function iniciarVarredura() {
+            const btn = document.getElementById('btn-scan');
+            const box = document.getElementById('scan-box');
+            btn.disabled = true;
+            btn.innerText = 'Buscando redes... aguarde';
+            box.innerHTML = '<div class="empty-hint">Varrendo canais de rádio 2.4GHz...</div>';
+
+            fetch('/scanwifi', { method: 'POST' })
+                .then(() => {
+                    setTimeout(consultarResultadoScan, 3500);
+                })
+                .catch(() => {
+                    btn.disabled = false;
+                    btn.innerText = '🔍 Escanear Redes Wi-Fi';
+                    box.innerHTML = '<div class="empty-hint">Falha ao iniciar varredura.</div>';
                 });
         }
-    
-        // Função para buscar o IP da rede conectada e atualizar na página
-        function fetchConnectedNetworkInfo() {
-            // Faz uma requisição para o servidor na rota /ipdarede
-            fetch('/ipdarede')
-                .then(response => response.json())
-                .then(data => {
-                    // Atualiza o parágrafo com o IP da rede conectada
-                    document.getElementById('connected-ip').innerText = `IP da Rede Conectada: ${data.ip}`;
+
+        /**
+         * Obtém o resultado da varredura
+         */
+        function consultarResultadoScan() {
+            const btn = document.getElementById('btn-scan');
+            const box = document.getElementById('scan-box');
+
+            fetch('/scanstatus')
+                .then(r => r.json())
+                .then(redes => {
+                    btn.disabled = false;
+                    btn.innerText = '🔍 Escanear Redes Wi-Fi';
+                    box.innerHTML = '';
+
+                    if (!redes || redes.length === 0) {
+                        box.innerHTML = '<div class="empty-hint">Nenhuma rede encontrada. Tente novamente.</div>';
+                        return;
+                    }
+
+                    redes.forEach(rede => {
+                        const div = document.createElement('div');
+                        div.className = 'network-item';
+                        div.onclick = () => selecionarRede(rede.ssid);
+                        div.innerHTML = `
+                            <span class="network-name">📶 ${rede.ssid}</span>
+                            <span class="network-signal">${rede.rssi} dBm</span>
+                        `;
+                        box.appendChild(div);
+                    });
                 })
-                .catch(error => console.error('Erro ao carregar informações da rede conectada:', error));
+                .catch(() => {
+                    btn.disabled = false;
+                    btn.innerText = '🔍 Escanear Redes Wi-Fi';
+                    box.innerHTML = '<div class="empty-hint">Erro ao obter lista de redes.</div>';
+                });
         }
-    
-        // Inicialização ao carregar a página
-        document.addEventListener('DOMContentLoaded', function() {
-            // Chama as funções para buscar as redes salvas e as informações da rede conectada
-            fetchSavedNetworks();
-            fetchConnectedNetworkInfo();
-        });
-    
-        // Alterna a visibilidade da senha no campo de input
-        document.getElementById('toggle-password').addEventListener('click', function() {
-            var passwordField = document.getElementById('password');
-            var button = this;
-            // Verifica se a senha está oculta e alterna entre mostrar e ocultar
-            if (passwordField.type === 'password') {
-                passwordField.type = 'text';
-                button.textContent = 'Ocultar';
-            } else {
-                passwordField.type = 'password';
-                button.textContent = 'Mostrar';
-            }
-        });
-    
-        // Lida com a submissão do formulário para salvar as credenciais de Wi-Fi
-        document.getElementById('save-form').addEventListener('submit', function(event) {
-            event.preventDefault();
-            var form = this;
-            var formData = new FormData(form);
-    
-            // Envia os dados do formulário para o servidor usando a rota /salvarwifi
-            fetch(form.action, {
-                method: form.method,
-                body: formData
-            })
-            .then(response => {
-                // Verifica se a resposta é válida
-                if (!response.ok) {
-                    throw new Error('Network response was not ok');
-                }
-                // Retorna o texto da resposta
-                return response.text();
-            })
-            .then(data => {
-                // Exibe uma mensagem de sucesso e atualiza as redes salvas
-                var message = document.getElementById('message');
-                message.className = 'alert alert-success';
-                message.textContent = 'Rede conectada';
-                form.reset();
-                fetchSavedNetworks();
-                fetchConnectedNetworkInfo();
-            })
-            .catch(error => {
-                // Exibe uma mensagem de erro em caso de falha na conexão
-                console.error('Erro ao conectar na rede:', error);
-                var message = document.getElementById('message');
-                message.className = 'alert alert-danger';
-                message.textContent = 'Erro ao conectar na rede';
-            });
-        });
-    
-        // Funções para alternar entre modo noturno e modo alto contraste
-        function toggleNightMode() {
+
+        function selecionarRede(nomeSSID) {
+            document.getElementById('ssid').value = nomeSSID;
+            const pwd = document.getElementById('password');
+            pwd.value = '';
+            pwd.focus();
+        }
+
+        function toggleSenha() {
+            const f = document.getElementById('password');
+            f.type = (f.type === 'password') ? 'text' : 'password';
+        }
+
+        /**
+         * Salva as credenciais e acompanha a conexão em tempo real
+         */
+        function salvarConectar(e) {
+            e.preventDefault();
+            const msg = document.getElementById('msg');
+            const btnSubmit = document.getElementById('btn-submit');
+            
+            btnSubmit.disabled = true;
+            msg.className = 'alert alert-info';
+            msg.innerText = 'Salvando e conectando à rede externa... Aguarde o IP.';
+
+            const form = document.getElementById('form-wifi');
+            const dados = new FormData(form);
+
+            fetch('/salvarwifi', { method: 'POST', body: dados })
+                .then(r => {
+                    if (!r.ok) throw new Error();
+                    form.reset();
+                    listarRedesSalvas();
+
+                    // Realiza polling rápido para detectar o momento que o IP é gerado pelo roteador
+                    let tentativas = 0;
+                    const checarConexao = setInterval(() => {
+                        tentativas++;
+                        fetch('/ipdarede')
+                            .then(res => res.json())
+                            .then(d => {
+                                const ipExterno = d.ip_sta || (d.ip !== "192.168.26.7" && d.ip !== "0.0.0.0" ? d.ip : "");
+                                if (d.conectado || (ipExterno && ipExterno.length > 7)) {
+                                    clearInterval(checarConexao);
+                                    btnSubmit.disabled = false;
+                                    msg.className = 'alert alert-success';
+                                    msg.innerHTML = `Conectado com sucesso!<br>IP na rede externa: <a href="http://${ipExterno}" target="_blank" style="font-weight:bold; color:#155724;">http://${ipExterno}</a>`;
+                                    atualizarIP();
+                                } else if (tentativas >= 12) { // 12 x 1.5s = 18 segundos
+                                    clearInterval(checarConexao);
+                                    btnSubmit.disabled = false;
+                                    msg.className = 'alert alert-error';
+                                    msg.innerText = 'Tempo limite esgotado. Verifique a senha da rede ou o sinal do roteador.';
+                                    atualizarIP();
+                                }
+                            });
+                    }, 1500);
+                })
+                .catch(() => {
+                    btnSubmit.disabled = false;
+                    msg.className = 'alert alert-error';
+                    msg.innerText = 'Falha ao enviar credencial ao ESP32.';
+                });
+        }
+
+        function listarRedesSalvas() {
+            fetch('/listadewifi')
+                .then(r => r.text())
+                .then(txt => {
+                    const box = document.getElementById('saved-list');
+                    box.innerHTML = '';
+                    const linhas = txt.trim().split('\n');
+                    let encontrou = false;
+
+                    linhas.forEach(linha => {
+                        linha = linha.trim();
+                        if (linha.length > 0) {
+                            encontrou = true;
+                            const partes = linha.split(',');
+                            const ssid = partes[0];
+                            box.innerHTML += `
+                                <div class="saved-row">
+                                    <span><strong>${ssid}</strong></span>
+                                    <a class="del-link" href="#" onclick="excluirRede('${encodeURIComponent(ssid)}'); return false;">Excluir</a>
+                                </div>
+                            `;
+                        }
+                    });
+
+                    if (!encontrou) {
+                        box.innerHTML = '<span style="color:#888;">Nenhuma rede salva no sistema.</span>';
+                    }
+                });
+        }
+
+        function excluirRede(ssid) {
+            if (!confirm('Deseja excluir a rede salva?')) return;
+            fetch('/excluirwifi?ssid=' + ssid)
+                .then(() => {
+                    listarRedesSalvas();
+                    atualizarIP();
+                });
+        }
+
+        function toggleTema() {
             document.body.classList.toggle('night-mode');
         }
-    
-        function toggleHighContrastMode() {
-            document.body.classList.toggle('high-contrast');
-        }
-    
-        // Modo noturno
-        document.getElementById('toggle-night-mode').addEventListener('click', toggleNightMode);
-        // Modo alto contraste
-        document.getElementById('toggle-contrast-mode').addEventListener('click', toggleHighContrastMode);
-    
     </script>
-        <!-- Fim do código JavaScript -->
-    </body>
-    <!-- Fim do corpo do documento HTML -->
+</body>
 </html>
-<!-- Fim do documento HTML -->
     )rawliteral";
-    // Finaliza o literal de string retornado pela função em C++
 }
