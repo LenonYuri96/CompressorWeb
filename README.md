@@ -1,192 +1,236 @@
-Aqui está o conteúdo do `README.md` que integra todas as informações fornecidas, incluindo as imagens e o fluxograma:
+# EnergizAR - Sistema de Automação e Monitoramento de Compressores via ESP32
 
-```markdown
-# Sistema de Controle de Compressores via ESP32
+O **EnergizAR** é uma solução de automação e telemetria industrial desenvolvida em torno do microcontrolador **ESP32**. O sistema realiza o acionamento inteligente de compressores de ar comprimido, motores de ventilação e secadores por refrigeração através de pulsos elétricos não-bloqueantes de 500 ms, com monitoramento térmico contínuo, supervisão de pressão por pressostato mecânico, horímetro digital acumulador e proteção anti-curto-ciclo com persistência em memória Flash (SPIFFS).
 
-Este projeto foi desenvolvido para controlar o ligar e desligar de compressores utilizando um ESP32. O sistema possui uma interface web acessível via Wi-Fi, com autenticação e gerenciamento de usuários. Ele opera tanto em modo de **Access Point (AP)** quanto em modo de conexão a redes Wi-Fi locais.
+O firmware opera sob arquitetura de **tarefas cooperativas não-bloqueantes** sincronizadas por `millis()`, com servidor web HTTP assíncrono (**ESPAsyncWebServer**) e cão de guarda por hardware (**Task Watchdog Timer - TWDT** ativo em 10 segundos).
 
-## Desenvolvedores
+---
 
-Este projeto foi criado pelos seguintes alunos:
+## 👥 Equipe de Desenvolvimento e Mentoria
 
-- **Brenda**
-- **Davi**
-- **João**
-- **Pedro**
-- **Sofia**
+Projeto concebido e implementado no âmbito do **Programa Trilhas de Futuro** (Curso Técnico em Informática para Internet — Minas Gerais):
 
-## Funcionalidades
+### 💻 Alunos Desenvolvedores
+- **Brenda Luiza**
+- **Davi Afonso**
+- **João Martins**
+- **Pedro Lucas**
+- **Sofia Tresse**
 
-- **Autenticação de usuários:** Login com validação de credenciais para acessar o painel de controle.
-- **Controle de compressores:** Interface para ligar e desligar os compressores remotamente.
-- **Monitoramento:** Visualização de dados como pressão, umidade e tempo de uso.
-- **Manutenção remota:** Acesso para monitoramento de condições de operação para manutenção.
-- **Sistema de erros:** Páginas de erro personalizadas para lidar com situações como perda de conexão.
-- **Modo Access Point (AP):** O ESP32 pode criar um ponto de acesso próprio, permitindo que dispositivos se conectem diretamente a ele.
-- **Conexão via Wi-Fi:** Também pode se conectar a uma rede Wi-Fi existente, permitindo o controle via rede local.
+### 👨‍🏫 Instrutores e Arquitetura Técnica
+- **Lenon Yuri** — *Instrutor / Arquiteto de Software e Firmware* ([GitHub](https://github.com/LYuri26))
+- **Franco M. A. Caixeta** — *Instrutor / Co-autor de Infraestrutura* ([GitHub](https://github.com/RoCkHeLuCk))
 
-## Setup de Rede (Access Point)
+---
 
-O ESP32 pode atuar como um Access Point (AP), criando uma rede local própria para controlar os compressores. O ponto de acesso gerado pelo dispositivo tem os seguintes parâmetros:
+## ⚡ Mapeamento Geral de Portas e Pinagem (Pinout Definitivo)
 
-```cpp
-const char *ap_ssid = "EnergizAR"; // SSID do Access Point (nome da rede gerada pelo dispositivo)
-const char *ap_password = "12345678";  // Senha do Access Point (senha para se conectar à rede gerada pelo dispositivo)
+> **NOTA TÉCNICA DE ENGENHARIA:**  
+> Todas as colisões de pinos foram eliminadas. O pino de acionamento do **Motor 1** foi alocado no **GPIO 23** e a sua respectiva **Sobrecarga Térmica** no **GPIO 19**. Todos os pinos de saída utilizam lógica push-pull de pulso de 500 ms e todas as entradas de segurança operam com resistores internos de **PULLDOWN**, evitando leituras flutuantes.
 
-IPAddress local_ip(192, 168, 26, 7); // IP local do Access Point (endereço IP do Access Point no formato (A, B, C, D))
-IPAddress gateway(192, 168, 26, 1);  // Gateway do Access Point (endereço do roteador na rede do Access Point)
-IPAddress subnet(255, 255, 255, 0);  // Máscara de sub-rede do Access Point (define a faixa de IPs na rede do Access Point)
+### 📌 Tabela de Atribuição dos GPIOs do ESP32
+
+| Módulo / Função | GPIO | Direção | Modo Elétrico | Nível Ativo | Descrição da Ligação Física |
+| :--- | :---: | :---: | :---: | :---: | :--- |
+| **Pulso Motor 1 (Compressor)** | **GPIO 23** | Saída | Digital OUTPUT | `HIGH` (3.3V) | Bobina do contator/relé do compressor principal (Pulso 500 ms) |
+| **Pulso Motor 2 (Ventilador)** | **GPIO 27** | Saída | Digital OUTPUT | `HIGH` (3.3V) | Bobina do contator/relé do exaustor/ventilador (Pulso 500 ms) |
+| **Pulso Motor 3 (Secador)** | **GPIO 33** | Saída | Digital OUTPUT | `HIGH` (3.3V) | Bobina do contator/relé do secador de ar (Pulso 500 ms) |
+| **Feedback Contator 1** | **GPIO 14** | Entrada | `INPUT_PULLDOWN` | `HIGH` (3.3V) | Contato auxiliar NA (93-94) do contator do compressor |
+| **Feedback Contator 2** | **GPIO 26** | Entrada | `INPUT_PULLDOWN` | `HIGH` (3.3V) | Contato auxiliar NA (93-94) do contator do ventilador |
+| **Feedback Contator 3** | **GPIO 32** | Entrada | `INPUT_PULLDOWN` | `HIGH` (3.3V) | Contato auxiliar NA (93-94) do contator do secador |
+| **Sobrecarga Motor 1** | **GPIO 19** | Entrada | `INPUT_PULLDOWN` | `HIGH` (3.3V) | Contato de alarme NA (97-98) do relé térmico bimetálico 1 |
+| **Sobrecarga Motor 2** | **GPIO 25** | Entrada | `INPUT_PULLDOWN` | `HIGH` (3.3V) | Contato de alarme NA (97-98) do relé térmico bimetálico 2 |
+| **Sobrecarga Motor 3** | **GPIO 18** | Entrada | `INPUT_PULLDOWN` | `HIGH` (3.3V) | Contato de alarme NA (97-98) do relé térmico bimetálico 3 |
+| **Pressostato de Linha** | **GPIO 17** | Entrada | `INPUT_PULLDOWN` | `HIGH` (3.3V) | Sensor de pressão mecânico de alívio e sobrepressão |
+| **Chave de Manutenção** | **GPIO 04** | Entrada | `INPUT_PULLDOWN` | `HIGH` (3.3V) | Chave física comutadora no painel frontal de comando |
+| **Serial Debug (TX0 / RX0)** | **GPIO 01 / 03**| UART | N/A | N/A | Comunicação Serial com monitor a 115200 bps |
+
+---
+
+## 🛡️ Regras de Proteção e Temporizadores Industriais
+
+Para evitar a queima precoce dos enrolamentos dos compressores provocada por chaveamentos contínuos no painel ou por tentativas de partida com contrapressão no cabeçote, o sistema implementa travas de tempo diretamente no hardware:
+
+1. **Tempo Mínimo em Marcha (60 Minutos — 3600 segundos):**
+   * Ao emitir a ordem de **LIGAR**, o motor liga imediatamente via pulso de 500 ms e entra em bloqueio de desligamento por 60 minutos.
+   * Evita desligar o compressor prematuramente antes que o circuito atinja a temperatura de trabalho e ciclo de lubrificação adequados.
+   * *Exceção:* Falhas elétricas graves (sobrecarga ou pressostato) desarmam o motor no mesmo milissegundo, ignorando o timer.
+
+2. **Tempo de Descanso Obrigatório (10 Minutos — 600 segundos):**
+   * Ao emitir a ordem de **DESLIGAR**, o motor desliga via pulso de 500 ms e o botão fica bloqueado por 10 minutos com contagem regressiva exibida na tela.
+   * Impede a partida com pressão residual acumulada nos pistões, protegendo contra picos destrutivos de corrente de rotor bloqueado.
+
+3. **Sincronização Ativa Hardware-para-Browser:**
+   * O saldo dos temporizadores é gerenciado pelo ESP32 e enviado via JSON (`/motor-state`).
+   * A contagem regressiva (**`HH:MM:SS`** ou **`MM:SS`**) é real: se a página for recarregada ou aberta em múltiplos dispositivos, o tempo exibido é exatamente o do microcontrolador.
+
+4. **Cache em RAM e Wear-Leveling da Memória Flash:**
+   * Estados de relés e temporizadores são espelhados em RAM.
+   * Escritas repetitivas de valores idênticos ao já armazenado são descartadas, protegendo os setores da memória Flash SPIFFS contra desgaste prematuro.
+
+---
+
+## 📡 Topologia de Rede e Conectividade Wi-Fi
+
+O ESP32 opera em modo híbrido concorrente (**`WIFI_AP_STA`**), garantindo acesso local de emergência mesmo se o roteador externo falhar:
+
+```
+                  +-----------------------------------+
+                  |        ESP32 (WIFI_AP_STA)        |
+                  +-----------------+-----------------+
+                                    |
+            +-----------------------+-----------------------+
+            |                                               |
+            v                                               v
+   [ Interface SoftAP ]                            [ Interface Station ]
+   SSID: EnergizAR                                 Conectado ao Roteador Wi-Fi
+   Senha: 12345678                                 IP dinâmico via DHCP (Ex: 192.168.1.105)
+   IP Fixo: 192.168.26.7                           Acesso liberado pela intranet
 ```
 
-## Estrutura de Diretórios
+### Configurações de Fábrica do Ponto de Acesso (AP)
 
-Abaixo está a estrutura de diretórios do projeto, com uma visão detalhada dos arquivos principais e suas funções:
+const char *ap_ssid     = "EnergizAR";
+const char *ap_password = "12345678";
 
-```
-.pio/              # Diretório gerado automaticamente pelo PlatformIO (não precisa de modificação)
-.vscode/           # Arquivos de configuração do VSCode
-include/           # Cabeçalhos (.h) do projeto
-│   ├── autenticador.h     # Declaração de funções de autenticação de usuário
-│   ├── creditos.h         # Declaração das funções da página de créditos
-│   ├── dashboard.h        # Declaração das funções da página do painel de controle
-│   ├── index.h            # Declaração das funções da página inicial do sistema
-│   ├── ligadesliga.h      # Funções para controle de ligar/desligar compressores
-│   ├── manutencao.h       # Funções de gerenciamento e monitoramento de manutenção
-│   ├── paginaserro.h      # Declaração das funções das páginas de erro
-│   ├── pressao.h          # Monitoramento e exibição de dados de pressão
-│   ├── tempo.h            # Monitoramento de tempo de operação
-│   ├── umidade.h          # Monitoramento de umidade
-│   ├── wificonexao.h      # Declaração de funções de conexão Wi-Fi
-│   ├── wifigerenciador.h  # Gerenciamento da configuração Wi-Fi
-│   └── wifiinterface.h    # Interface de comunicação do Wi-Fi com o sistema
-lib/               # Diretório para bibliotecas de terceiros (se houver)
-src/               # Código-fonte (.cpp) do projeto
-│   ├── autenticador.cpp   # Implementação da autenticação de usuários
-│   ├── creditos.cpp       # Implementação da página de créditos
-│   ├── dashboard.cpp      # Implementação da página do painel de controle
-│   ├── index.cpp          # Arquivo de inicialização da interface web
-│   ├── ligadesliga.cpp    # Implementação do controle de ligar/desligar compressores
-│   ├── main.cpp           # Arquivo principal do projeto (inicializa o sistema)
-│   ├── manutencao.cpp     # Implementação do monitoramento de manutenção
-│   ├── paginaserro.cpp    # Implementação das páginas de erro
-│   ├── pressao.cpp        # Implementação do monitoramento de pressão
-│   ├── tempo.cpp          # Implementação do monitoramento de tempo de operação
-│   ├── umidade.cpp        # Implementação do monitoramento de umidade
-│   ├── wificonexao.cpp    # Implementação da conexão Wi-Fi
-│   ├── wifigerenciador.cpp # Implementação do gerenciamento de redes Wi-Fi
-│   └── wifiinterface.cpp  # Implementação da interface de comunicação Wi-Fi
-.gitignore          # Arquivo que especifica quais arquivos/diretórios devem ser ignorados pelo Git
-platformio.ini      # Arquivo de configuração do PlatformIO
-```
+IPAddress local_ip(192, 168, 26, 7);
+IPAddress gateway(192, 168, 26, 1);
+IPAddress subnet(255, 255, 255, 0);
 
-## Instalação
+### Gerenciador de Redes no Ar
+* **Varredura Assíncrona:** Varre redes Wi-Fi 2.4 GHz em segundo plano sem travar os motores nem o Task Watchdog.
+* **Preenchimento por Clique:** Ao tocar no nome da rede na lista, o SSID é preenchido automaticamente no formulário.
+* **Painel Dinâmico de Endereços IP:** Exibe em tempo real o IP obtido no roteador externo com link direto e mantém o IP do modo AP visível.
 
-1. **Clone o repositório:**
-   ```bash
-   git clone https://github.com/LYuri26/CompressorWeb.git
-   cd controle-compressor
-   ```
+---
 
-2. **Instale o [PlatformIO](https://platformio.org/) para compilar o código:**
-   - Certifique-se de que você tem o [VSCode](https://code.visualstudio.com/) instalado e o plugin do PlatformIO habilitado.
+## 🗂️ Estrutura de Diretórios do Projeto
 
-3. **Configure o ESP32:**
-   - Conecte o ESP32 ao seu computador.
-   - Edite o arquivo `platformio.ini` se necessário, para ajustar a porta serial e outros parâmetros de compilação.
-
-4. **Compile e envie o código:**
-   ```bash
-   pio run --target upload
-   ```
-
-5. **Conecte-se ao Access Point:**
-   - Após a configuração, conecte-se à rede Wi-Fi gerada pelo ESP32 com as credenciais definidas acima (`EnergizAR` / `12345678`).
-
-6. **Acesse o sistema:**
-   - Acesse a interface web pelo IP `192.168.26.7` no navegador, onde será solicitado o login.
-
-## Autenticação
-
-O sistema de login foi implementado para garantir a segurança do controle remoto dos compressores. Apenas usuários autenticados podem controlar o dispositivo. A implementação do login é gerida pelo arquivo `autenticador.cpp`, que verifica as credenciais inseridas na interface.
-
-## Principais Arquivos
-
-### `main.cpp`
-
-O arquivo principal do sistema, onde a configuração inicial do ESP32 e o loop principal do programa são definidos. Ele faz a configuração do Wi-Fi, o gerenciamento do Access Point e o roteamento de requisições da interface web.
-
-### `index.cpp`
-
-Este arquivo define o comportamento e a estrutura da página inicial do sistema, carregada assim que o usuário se conecta ao Access Point. Ele contém o código HTML e JavaScript que compõe o painel de controle dos compressores.
-
-### `ligadesliga.cpp`
-
-Contém a lógica que lida com os comandos para ligar ou desligar os compressores, recebendo comandos via interface web e enviando sinais correspondentes ao hardware.
-
-### `wificonexao.cpp` e `wifigerenciador.cpp`
-
-Responsáveis pela configuração de rede e gerenciamento das conexões Wi-Fi. Definem o comportamento tanto para o modo **Access Point** quanto para a conexão a redes Wi-Fi externas.
-
-## Fluxograma do Sistema
-
-![Fluxograma do Sistema](Fluxograma_hanibal.png)
-
-## ESP32-WROOM-32 - Descrição e Pinagem
-
-Este documento contém informações sobre o módulo **ESP32-WROOM-32**, incluindo suas características, especificações e pinagem.
-
-### Vista do Módulo ESP32-WROOM-32  
-![ESP32-WROOM-32](placa.jpg)  
-
-### Pinagem do ESP32-WROOM-32  
-![Pinagem ESP32](Pinagem.jpg)  
-
-### Fluxograma do ESP32-WROOM-32  
-![Pinagem ESP32](Fluxograma.png)  
-
-### **Características Principais**
-- **Wi-Fi 802.11 b/g/n** e **Bluetooth 4.2 (Classic e BLE)**.
-- **Processador Dual-Core Xtensa LX6** com clock de até **240 MHz**.
-- **Memória RAM de 520 KB** e suporte a **Flash de 4 MB ou mais**.
-- **Baixo consumo de energia**, ideal para dispositivos móveis e aplicações IoT.
-- **Suporte para múltiplos protocolos de comunicação**, incluindo UART, I2C, SPI, PWM, ADC e DAC.
-
-### **📍 Pinos superiores da placa**
-| Pino  | Função |
-|-------|--------|
-| **V5**  | Alimentação 5V |
-| **CMD, SD3, SD2** | Interface SPI/SD |
-| **G13 a G14** | GPIOs gerais |
-| **G27 a G34** | GPIOs, ADCs, I2C, PWM |
-| **SM, SP** | SPI/UART |
-| **EN** | Enable (ativação do ESP32) |
-| **3V3** | Alimentação 3.3V |
-
-### **📍 Pinos inferiores da placa**
-| Pino  | Função |
-|-------|--------|
-| **GND** | Terra |
-| **C0, C2** | GPIOs gerais |
-| **G4, G5, G16** | GPIOs, PWM, ADC |
-| **G17 a G19** | UART, SPI |
-| **G21, G22** | I2C (SDA/SCL) |
-| **RX0, TX0** | Comunicação serial (UART) |
-
-## Créditos
-
-Projeto desenvolvido como parte do curso Técnico de Informática Para Internet pelos alunos:
-
-- **Brenda**
-- **Davi**
-- **João**
-- **Pedro**
-- **Sofia**
-
-## Licença
-
-Este projeto está licenciado sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para mais detalhes.
+```text
+├── .pio/                       # Metadados de compilação do PlatformIO
+├── include/                    # Cabeçalhos e protótipos de funções (.h)
+│   ├── autenticador.h          # Gerenciamento de sessão e tokens de login
+│   ├── creditos.h              # Rota e interface de autoria do projeto
+│   ├── dashboard.h             # Painel operacional de controle dos motores
+│   ├── index.h                 # Página de aterrissagem e formulário de login
+│   ├── ligadesliga.h           # Definição dos pinos de potência, timers e pulsos
+│   ├── manutencao.h            # Monitoramento da chave física de manutenção
+│   ├── paginaserro.h           # Telas de erro HTTP (404, acesso negado)
+│   ├── pressao.h               # Telemetria pneumática e nível de óleo
+│   ├── pressostato.h           # Sensor mecânico de pressão (GPIO 17)
+│   ├── sobrecarga.h            # Proteção térmica bimetálica (GPIOs 19, 25, 18)
+│   ├── tempo.h                 # Sincronização horária com servidores NTP
+│   ├── umidade.h               # Monitor de qualidade do ar comprimido e ponto de orvalho
+│   ├── wificonexao.h           # Máquina de estados não-bloqueante do rádio Wi-Fi
+│   ├── wifigerenciador.h       # Rotas REST de configuração de rede e IP
+│   └── wifiinterface.h         # Interface gráfica do portal de Wi-Fi
+├── src/                        # Implementação das rotinas em C++ (.cpp)
+│   ├── autenticador.cpp        # Verificação de credenciais e cookies
+│   ├── creditos.cpp            # Interface estilizada de desenvolvedores
+│   ├── dashboard.cpp           # Dashboard responsivo com timers sincronizados
+│   ├── index.cpp               # Interface inicial de login
+│   ├── ligadesliga.cpp         # Lógica soberana de acionamento por pulso
+│   ├── main.cpp                # Orquestrador do firmware e loop cooperativo
+│   ├── manutencao.cpp          # Debounce e bloqueio por chave de manutenção
+│   ├── paginaserro.cpp         # Respostas de exceção HTTP
+│   ├── pressao.cpp             # Interface de pressão e pressostato
+│   ├── pressostato.cpp         # Leitura de alívio pneumático
+│   ├── sobrecarga.cpp          # Armação segura e desarme por sobrecarga
+│   ├── tempo.cpp               # Cliente SNTP para horário fabril (08h às 22h)
+│   ├── umidade.cpp             # Interface de medição de saturação
+│   ├── wificonexao.cpp         # Máquina de estados não-bloqueante Wi-Fi
+│   ├── wifigerenciador.cpp     # Endpoints de varredura, persistência e IP
+│   └── wifiinterface.cpp       # HTML/CSS/JS do gerenciador de Wi-Fi
+├── platformio.ini              # Configurações de build e upload do microcontrolador
+└── README.md                   # Documentação técnica do projeto
 ```
 
-### Notas:
-- Substitua `Fluxograma_hanibal.png`, `placa.jpg` e `Pinagem.jpg` pelos caminhos corretos das imagens no repositório.
-- Certifique-se de que as imagens estejam no diretório correto para que sejam exibidas corretamente no `README.md`.
+---
+
+## 🔌 Diagrama Elétrico e Conexões
+
+### Esquemático do Acionamento e Proteções
+```
+                   ESP32 DEVKIT V1
+              +-----------------------+
+              |                       |
+(Pulso 500ms) | GPIO 23 ------> [IN1] | Módulo Relé 1 (Compressor)
+(Pulso 500ms) | GPIO 27 ------> [IN2] | Módulo Relé 2 (Ventilador)
+(Pulso 500ms) | GPIO 33 ------> [IN3] | Módulo Relé 3 (Secador)
+              |                       |
+(Feedback NA) | GPIO 14 <------ [94]  | Contato Auxiliar Contator 1 (3.3V)
+(Feedback NA) | GPIO 26 <------ [94]  | Contato Auxiliar Contator 2 (3.3V)
+(Feedback NA) | GPIO 32 <------ [94]  | Contato Auxiliar Contator 3 (3.3V)
+              |                       |
+(Sobrecarga)  | GPIO 19 <------ [98]  | Contato Falha Relé Térmico 1 (3.3V)
+(Sobrecarga)  | GPIO 25 <------ [98]  | Contato Falha Relé Térmico 2 (3.3V)
+(Sobrecarga)  | GPIO 18 <------ [98]  | Contato Falha Relé Térmico 3 (3.3V)
+              |                       |
+(Pressostato) | GPIO 17 <------ [P1]  | Pressostato de Linha Pneumática
+(Manutenção)  | GPIO 04 <------ [S1]  | Chave Seletora de Painel
+              |                       |
+              | GND ----------> GND   | Barramento Comum de Terra
+              | 3V3 ----------> +3.3V | Barramento de Alimentação de Sinal
+              +-----------------------+
+```
+
+---
+
+## 🚀 Como Compilar e Gravar
+
+### Pré-requisitos
+* [Visual Studio Code](https://code.visualstudio.com/)
+* Extensão [PlatformIO IDE](https://platformio.org/)
+* Cabo Micro-USB de boa qualidade (com suporte a transferência de dados)
+
+### Arquivo de Configuração (`platformio.ini`)
+Recomenda-se utilizar a velocidade de upload de **115200** ou **460800** bps para estabilidade na gravação da Flash:
+
+```ini
+[env:esp32dev]
+platform = espressif32
+board = esp32dev
+framework = arduino
+monitor_speed = 115200
+upload_speed = 115200
+board_build.flash_mode = dio
+board_build.f_flash = 40000000L
+lib_deps =
+    ESPAsyncWebServer
+    AsyncTCP
+```
+
+### Comandos de Terminal (PlatformIO CLI)
+```bash
+# 1. Clonar o repositório
+git clone https://github.com/LYuri26/CompressorWeb.git
+cd CompressorWeb
+
+# 2. Compilar o projeto
+pio run
+
+# 3. Fazer o upload do firmware para a placa ESP32
+pio run --target upload
+
+# 4. Abrir o monitor serial para acompanhar os logs em tempo real
+pio device monitor
+```
+
+---
+
+## 🌐 Endpoints da API REST
+
+| Rota | Método | Descrição | Resposta |
+| :--- | :---: | :--- | :--- |
+| `/login` | `POST` | Processa credenciais de acesso do operador | Redirecionamento com cookie de sessão |
+| `/logout` | `GET` | Invalida a sessão ativa | Redirecionamento para a tela de login |
+| `/motor-state`| `GET` | Telemetria completa em tempo real | JSON com estados, alarmes e segundos restantes |
+| `/toggle` | `GET/POST`| Manobra de ligar/desligar motor (`?motor=1&action=ligar`) | Confirmação em texto ou motivo do bloqueio |
+| `/ipdarede` | `GET` | Consulta os endereços IP da rede externa e do AP | JSON contendo `ip_sta`, `ip_ap`, `ssid` e status |
+| `/scanwifi` | `POST` | Dispara varredura assíncrona das redes locais | JSON `{"status":"scanning_started"}` |
+| `/scanstatus`| `GET` | Retorna as redes encontradas no ar com RSSI | Array JSON contendo SSIDs e sinais (dBm) |
+| `/salvarwifi`| `POST` | Grava novas credenciais no arquivo `/wifiredes.txt` | JSON confirmando início da conexão |
+| `/excluirwifi`| `GET` | Remove uma rede gravada na Flash (`?ssid=Rede`) | Retorno de confirmação |
+## 📄 Licença
+
+Este projeto é disponibilizado sob a licença **MIT**. Consulte o arquivo [LICENSE](LICENSE) para mais informações.
