@@ -97,27 +97,27 @@
 
 /**
  * Pinos de SAIDA digital dedicados ao chaveamento dos reles de comando:
- *   Indice 0 -> Motor 1 (Compressor Principal) : GPIO 23
+ *   Indice 0 -> Motor 1 (Compressor Principal) : GPIO 25
  *   Indice 1 -> Motor 2 (Motor Ventilador)     : GPIO 27
- *   Indice 2 -> Motor 3 (Motor Secador de Ar)  : GPIO 33
+ *   Indice 2 -> Motor 3 (Motor Secador de Ar)  : GPIO 26
  *
  * Justificativa de Engenharia:
- *   GPIO 23, 27 e 33 sao pinos de saida nativos e seguros que nao interferem
+ *   GPIO 25, 27 e 26 sao pinos de saida nativos e seguros que nao interferem
  *   com funcoes de strapping do ESP32 nem com o rádio Wi-Fi integrado.
  */
-int pinosMotores[NUM_MOTORES] = {23, 27, 33};
+int pinosMotores[NUM_MOTORES] = {25, 27, 26};
 
 /**
  * Pinos de ENTRADA digital para leitura dos contatos auxiliares NA dos contatores:
  *   Indice 0 -> Retorno Feedback Motor 1 : GPIO 14
- *   Indice 1 -> Retorno Feedback Motor 2 : GPIO 26
+ *   Indice 1 -> Retorno Feedback Motor 2 : GPIO 33
  *   Indice 2 -> Retorno Feedback Motor 3 : GPIO 32
  *
  * Justificativa de Engenharia:
  *   Todos configurados em modo INPUT_PULLDOWN para assegurar nivel 0V (LOW)
  *   estavel na ausencia de fechamento fisico de contato mecânico.
  */
-int pinosStatus[NUM_MOTORES] = {14, 26, 32};
+int pinosStatus[NUM_MOTORES] = {14, 33, 32};
 
 /**
  * Aliases globais mantidos para retrocompatibilidade com modulos antigos.

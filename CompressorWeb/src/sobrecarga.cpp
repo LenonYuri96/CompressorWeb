@@ -25,14 +25,14 @@
 /**
  * Pinos conectados aos contatos auxiliares 97-98 (NA) dos reles termicos:
  * - Motor 1 (Compressor Principal): GPIO 19 (Isolado de atuadores e barramento)
- * - Motor 2 (Motor Ventilador):     GPIO 25 (Entrada dedicada de protecao)
+ * - Motor 2 (Motor Ventilador):     GPIO 12 (Entrada dedicada de protecao)
  * - Motor 3 (Motor Secador de Ar):  GPIO 18 (Entrada dedicada de protecao)
  *
  * NOTA ELETRICA: Todas as entradas operam com resistores de PULLDOWN ativados.
  * - Nivel LOW  (0V):   Circuito em condicao segura e motor liberado.
  * - Nivel HIGH (3.3V): Rele termico disparou por sobrecorrente de armadura.
  */
-const int pinosSobrecarga[NUM_MOTORES] = {19, 25, 18};
+const int pinosSobrecarga[NUM_MOTORES] = {19, 12, 18};
 
 // -------------------------------------------------------------------------
 // 2. VARIAVEIS GLOBAIS E ESTADOS DE OPERACAO EM RAM
