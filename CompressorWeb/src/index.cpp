@@ -1,5 +1,6 @@
 #include <ESPAsyncWebServer.h> // Inclui a biblioteca para criar um servidor web assíncrono
 #include "index.h"             // Inclui o cabeçalho que pode definir variáveis ou funções específicas para a página de login
+#include "rodape.h"            // Inclui o modelo padrão de rodapé industrial EnergizAR
 
 // -------------------------------------------------------------------------
 // Função para configurar a página de login
@@ -197,17 +198,7 @@ body {
             min-height: 18px;
         }
 /* Estilos para o rodapé */
-.footer {
-    width: 100%;
-    background-color: #1e272e;
-    border-top: 3px solid #e65100;
-    color: #cfd8dc;
-    text-align: center;
-    padding: 10px 0;
-    font-size: 12px;
-    font-weight: 600;
-    margin-top: auto; /* Mantém o rodapé no final da página sem fixá-lo */
-}
+)rawliteral" ENERGIZAR_FOOTER_CSS R"rawliteral(
             .theme-toggle {
             margin: 4px 0 0 0;
         }
@@ -239,11 +230,7 @@ body {
                     aria-label="Ativar modo noturno">🌓 Modo Noturno</button>
             </div>
         </div>
-        <div class="footer" role="contentinfo">
-            <p>Aplicação desenvolvida pela Turma de Informática Para Internet
-                Trilhas de Futuro 2024</p>
-            <p>Instrutor: Lenon Yuri</p>
-        </div>
+)rawliteral" ENERGIZAR_FOOTER_HTML R"rawliteral(
 
         <script>
         document.addEventListener('DOMContentLoaded', function () {

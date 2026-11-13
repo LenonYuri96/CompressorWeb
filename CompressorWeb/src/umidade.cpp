@@ -11,6 +11,7 @@
 #include <ESPAsyncWebServer.h>
 #include "umidade.h"
 #include "autenticador.h"
+#include "rodape.h"
 
 void setupUmidadePage(AsyncWebServer &server)
 {
@@ -215,18 +216,7 @@ void setupUmidadePage(AsyncWebServer &server)
         body.night-mode .subtitle { color: #b0bec5; }
         body.night-mode .progress-bar-bg { background: #2b3542; border-color: #30363d; }
 
-        .footer {
-            width: 100%;
-            background-color: #1e272e;
-            border-top: 3px solid #e65100;
-            color: #cfd8dc;
-            text-align: center;
-            padding: 10px 0;
-            font-size: 12px;
-            font-weight: 600;
-            letter-spacing: 0.4px;
-            margin-top: auto;
-        }
+)rawliteral" ENERGIZAR_FOOTER_CSS R"rawliteral(
     </style>
 </head>
 <body>
@@ -277,9 +267,7 @@ void setupUmidadePage(AsyncWebServer &server)
         <button type="button" class="btn btn-theme" onclick="toggleTema()">🌓 Alternar Tema</button>
     </div>
 
-    <div class="footer">
-        EnergizAR - Automação Industrial e Monitoramento
-    </div>
+)rawliteral" ENERGIZAR_FOOTER_HTML R"rawliteral(
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {

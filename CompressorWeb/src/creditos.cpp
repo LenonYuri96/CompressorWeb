@@ -10,6 +10,7 @@
 
 #include "creditos.h"
 #include <ESPAsyncWebServer.h>
+#include "rodape.h"
 
 /**
  * Configura a rota HTTP e entrega a interface da página de créditos.
@@ -331,18 +332,7 @@ void setupCreditosPage(AsyncWebServer &server)
         /* -------------------------------------------------------------
            RODAPÉ PADRÃO ENERGIZAR
            ------------------------------------------------------------- */
-        .footer {
-            width: 100%;
-            background-color: #1e272e;
-            border-top: 3px solid #e65100;
-            color: #cfd8dc;
-            text-align: center;
-            padding: 10px 0;
-            font-size: 12px;
-            font-weight: 600;
-            letter-spacing: 0.4px;
-            margin-top: auto;
-        }
+)rawliteral" ENERGIZAR_FOOTER_CSS R"rawliteral(
     </style>
 </head>
 <body>
@@ -393,9 +383,7 @@ void setupCreditosPage(AsyncWebServer &server)
         </div>
     </div>
 
-    <div class="footer">
-        EnergizAR - Automação Industrial e Monitoramento
-    </div>
+)rawliteral" ENERGIZAR_FOOTER_HTML R"rawliteral(
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {

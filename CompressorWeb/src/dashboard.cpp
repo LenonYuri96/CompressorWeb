@@ -69,6 +69,7 @@
 #include "sobrecarga.h"
 #include "pressostato.h"
 #include "ia_local.h"
+#include "rodape.h"
 
 // ============================================================================
 // SECAO 2: REGISTRO DE ROTAS E CONTROLADORES HTTP DO DASHBOARD
@@ -340,18 +341,7 @@ void setupDashboardPage(AsyncWebServer &server)
         /* -------------------------------------------------------------
            RODAPE INSTITUCIONAL (BARRA DE ACO INDUSTRIAL)
            ------------------------------------------------------------- */
-        .footer {
-            width: 100%;
-            background-color: #1e272e;
-            border-top: 3px solid #e65100;
-            color: #cfd8dc;
-            text-align: center;
-            padding: 10px 0;
-            font-size: 12px;
-            font-weight: 600;
-            letter-spacing: 0.4px;
-            margin-top: auto;
-        }
+)rawliteral" ENERGIZAR_FOOTER_CSS R"rawliteral(
     </style>
 </head>
 <body>
@@ -397,9 +387,7 @@ void setupDashboardPage(AsyncWebServer &server)
         <a href="/logout" class="btn-link btn-link-logout">Encerrar Sessão</a>
     </div>
 
-    <div class="footer">
-        EnergizAR - Automação Industrial e Monitoramento
-    </div>
+)rawliteral" ENERGIZAR_FOOTER_HTML R"rawliteral(
 
     <script>
     /**

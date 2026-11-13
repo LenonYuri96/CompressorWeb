@@ -1,5 +1,6 @@
 #include <ESPAsyncWebServer.h> // Biblioteca para criar e gerenciar um servidor web assíncrono no ESP32
 #include "paginaserro.h"       // Cabeçalho para a configuração específica das páginas de erro
+#include "rodape.h"            // Cabeçalho com o modelo padrão de rodapé industrial EnergizAR
 
 /**
  * Gera uma página de erro em HTML com base nos parâmetros fornecidos.
@@ -25,8 +26,9 @@ String generateErrorPage(const String &title, const String &message, const Strin
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; /* Define a fonte padrão industrial */
             display: flex; /* Usa o modelo de layout flexbox para centralizar o conteúdo */
-            justify-content: center; /* Alinha o conteúdo horizontalmente no centro da página */
-            align-items: center; /* Alinha o conteúdo verticalmente no centro da página */
+            flex-direction: column; /* Organiza o cartão de erro e o rodapé em coluna */
+            justify-content: space-between; /* Mantém o rodapé sempre ancorado na base da página */
+            align-items: center; /* Alinha o conteúdo horizontalmente no centro da página */
             min-height: 100vh; /* Define a altura da página como 100% da altura da viewport (tela visível) */
             margin: 0; /* Remove as margens padrão do navegador */
             background-color: #d6dde4; /* Fundo chapa aço industrial */
@@ -51,6 +53,7 @@ String generateErrorPage(const String &title, const String &message, const Strin
             box-shadow: 0 10px 28px rgba(15, 23, 30, 0.22), inset 0 1px 0 #ffffff; /* Profundidade industrial */
             max-width: 460px; /* Define a largura máxima do container */
             width: 92%; /* Responsivo para telas móveis */
+            margin: auto; /* Centraliza verticalmente acima do rodapé */
         }
         body.night-mode .container {
             background-color: #161b22;
@@ -102,6 +105,7 @@ String generateErrorPage(const String &title, const String &message, const Strin
         a:active {
             transform: translateY(1px);
         }
+)rawliteral" ENERGIZAR_FOOTER_CSS R"rawliteral(
     </style>
 </head>
 <body>
@@ -113,6 +117,7 @@ String generateErrorPage(const String &title, const String &message, const Strin
         <a href=")rawliteral" +
            linkHref + R"rawliteral(">)rawliteral" + linkText + R"rawliteral(</a> <!-- Link para navegação para a URL fornecida -->
     </div>
+)rawliteral" ENERGIZAR_FOOTER_HTML R"rawliteral(
     <script>
         if (localStorage.getItem('energizar_theme') === 'night') {
             document.body.classList.add('night-mode');

@@ -10,6 +10,7 @@
  */
 
 #include "wifiinterface.h"
+#include "rodape.h"
 
 // -------------------------------------------------------------------------
 // Função: getWiFiManagementPage
@@ -383,17 +384,7 @@ const char *getWiFiManagementPage()
             border-radius: 4px;
         }
 
-        .footer {
-            width: 100%;
-            background-color: #1e272e;
-            border-top: 3px solid #e65100;
-            color: #cfd8dc;
-            text-align: center;
-            font-size: 12px;
-            font-weight: 600;
-            letter-spacing: 0.4px;
-            padding: 10px 0;
-        }
+)rawliteral" ENERGIZAR_FOOTER_CSS R"rawliteral(
     </style>
 </head>
 <body>
@@ -451,9 +442,7 @@ const char *getWiFiManagementPage()
         <button type="button" onclick="toggleTema()" class="btn btn-theme">🌓 Alternar Tema</button>
     </div>
 
-    <div class="footer">
-        EnergizAR - Automação Industrial e Monitoramento
-    </div>
+)rawliteral" ENERGIZAR_FOOTER_HTML R"rawliteral(
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
