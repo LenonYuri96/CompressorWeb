@@ -5,12 +5,15 @@
  * DESCRIÇÃO: Gerenciamento do modo de manutenção através de chave física.
  *            Memoriza o estado anterior das máquinas, desliga com segurança,
  *            bloqueia comandos externos e restaura o funcionamento anterior
- *            de forma assíncrona (sem atrasos bloqueantes de delay).
+ *            de forma assíncrona respeitando sobrecarga, pressostato, horário
+ *            fabril e temporizadores anti-curto-ciclo.
  * ============================================================================
  */
 
 #include "manutencao.h"
 #include "ligadesliga.h"
+#include "sobrecarga.h"
+#include "pressostato.h"
 
 // -------------------------------------------------------------------------
 // 1. Constantes e Definições de Hardware
@@ -168,7 +171,7 @@ bool atualizarEstadoManutencao()
                 // Inicia o processo não-bloqueante de religamento escalonado
                 restauracaoEmAndamento = true;
                 motorSendoRestaurado = 0;
-                tempoProximoReligamento = agora; // Primeiro motor liga imediatamente se necessário
+                tempoProximoReligamento = agora; // Primeiro motor liga imediatamente se seguro
             }
 
             return true; // Indica que houve transição no estado
@@ -177,32 +180,55 @@ bool atualizarEstadoManutencao()
 
     // ---------------------------------------------------------------------
     // 3. Processo Não-Bloqueante de Religamento Escalonado dos Motores
-    //    Evita queda de tensão e picos de partida simultânea na rede elétrica.
+    //    Evita queda de tensão e valida todos os intertravamentos antes de ligar.
     // ---------------------------------------------------------------------
     if (restauracaoEmAndamento)
     {
-        if (agora >= tempoProximoReligamento)
+        if ((long)(agora - tempoProximoReligamento) >= 0)
         {
             if (motorSendoRestaurado < NUM_MOTORES)
             {
-                // Se o motor estava ativo antes da manutenção entrar
                 if (motoresEstadoAnterior[motorSendoRestaurado])
                 {
-                    Serial.printf("[MANUTENÇÃO] Restaurando Motor %d (Pulso não-bloqueante)...\n",
-                                  motorSendoRestaurado + 1);
+                    bool bloqueadoHorario = (isAfterClosingTime() || isBeforeOpeningTime());
+                    bool emSobrecarga = sobrecargaDetectada[motorSendoRestaurado];
+                    bool erroPressostato = (motorSendoRestaurado == 0 && pressostatoAtivo);
 
-                    dispararPulsoMotor(motorSendoRestaurado);
-                    motoresLigados[motorSendoRestaurado] = true;
-                    saveMotorState(arquivosMotores[motorSendoRestaurado], true);
+                    if (bloqueadoHorario || emSobrecarga || erroPressostato)
+                    {
+                        Serial.printf("[MANUTENÇÃO] Motor %d NÃO restaurado por intertravamento "
+                                      "(horario=%d, sobrecarga=%d, pressostato=%d).\n",
+                                      motorSendoRestaurado + 1,
+                                      (int)bloqueadoHorario,
+                                      (int)emSobrecarga,
+                                      (int)erroPressostato);
+
+                        motoresEstadoAnterior[motorSendoRestaurado] = false;
+                        motorSendoRestaurado++;
+                        tempoProximoReligamento = agora + INTERVALO_ENTRE_MOTORES_MS;
+                    }
+                    else if (!isPulsoMotorAtivo(motorSendoRestaurado) &&
+                             dispararPulsoMotor(motorSendoRestaurado))
+                    {
+                        Serial.printf("[MANUTENÇÃO] Motor %d restaurado com segurança (Pulso + Timer 60min).\n",
+                                      motorSendoRestaurado + 1);
+
+                        motoresLigados[motorSendoRestaurado] = true;
+                        saveMotorState(arquivosMotores[motorSendoRestaurado], true);
+                        iniciarTimerMotorSegundos(motorSendoRestaurado, LIGAR_TIMEOUT);
+
+                        motorSendoRestaurado++;
+                        tempoProximoReligamento = agora + INTERVALO_ENTRE_MOTORES_MS;
+                    }
                 }
                 else
                 {
                     Serial.printf("[MANUTENÇÃO] Motor %d permanecia desligado. Nenhuma ação necessária.\n",
                                   motorSendoRestaurado + 1);
-                }
 
-                motorSendoRestaurado++;
-                tempoProximoReligamento = agora + INTERVALO_ENTRE_MOTORES_MS;
+                    motorSendoRestaurado++;
+                    tempoProximoReligamento = agora + INTERVALO_ENTRE_MOTORES_MS;
+                }
             }
             else
             {
@@ -218,18 +244,15 @@ bool atualizarEstadoManutencao()
     // ---------------------------------------------------------------------
     if (sistemaEmManutencao)
     {
-        // Garante que nenhum motor permaneça ligado por comandos externos
         for (int i = 0; i < NUM_MOTORES; i++)
         {
-            if (motoresLigados[i])
+            if (motoresLigados[i] && !isPulsoMotorAtivo(i) && dispararPulsoMotor(i))
             {
-                dispararPulsoMotor(i);
                 motoresLigados[i] = false;
                 saveMotorState(arquivosMotores[i], false);
             }
         }
 
-        // Diagnóstico periódico para manter registro no log do monitor serial
         if (agora - ultimoLogManutencao >= INTERVALO_LOG_STATUS_MS)
         {
             ultimoLogManutencao = agora;

@@ -402,6 +402,9 @@ const char *getWiFiManagementPage()
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
+            if (localStorage.getItem('energizar_theme') === 'night') {
+                document.body.classList.add('night-mode');
+            }
             atualizarIP();
             listarRedesSalvas();
             // Polling continuo a cada 3 segundos para detectar quando o roteador atribuir o IP
@@ -409,12 +412,28 @@ const char *getWiFiManagementPage()
         });
 
         /**
+         * Verifica se a sessao expirou (401/403) e redireciona com seguranca
+         */
+        function tratarNaoAutorizado(res) {
+            if (res.status === 401 || res.status === 403) {
+                window.location.href = '/';
+                return true;
+            }
+            return false;
+        }
+
+        /**
          * Consulta o IP atual (STA e AP) diretamente do ESP32
          */
         function atualizarIP() {
             fetch('/ipdarede')
-                .then(r => r.json())
+                .then(r => {
+                    if (tratarNaoAutorizado(r)) return null;
+                    return r.json();
+                })
                 .then(d => {
+                    if (!d) return;
+
                     const staIpEl = document.getElementById('sta-ip');
                     const staSsidRow = document.getElementById('sta-ssid-row');
                     const staSsidEl = document.getElementById('sta-ssid');
@@ -431,15 +450,22 @@ const char *getWiFiManagementPage()
 
                     if (conectado && ipExterno) {
                         staIpEl.className = "ip-value ip-sta-online";
-                        staIpEl.innerHTML = `<a href="http://${ipExterno}" target="_blank" style="color:#2e7d32; text-decoration:underline;">${ipExterno}</a>`;
+                        staIpEl.innerHTML = '';
+                        const link = document.createElement('a');
+                        link.href = 'http://' + ipExterno;
+                        link.target = '_blank';
+                        link.style.color = '#2e7d32';
+                        link.style.textDecoration = 'underline';
+                        link.textContent = ipExterno;
+                        staIpEl.appendChild(link);
                         
                         if (d.ssid && d.ssid.length > 0) {
                             staSsidRow.style.display = "flex";
-                            staSsidEl.innerText = d.ssid;
+                            staSsidEl.textContent = d.ssid;
                         }
                     } else {
                         staIpEl.className = "ip-value ip-sta-offline";
-                        staIpEl.innerText = "Desconectado";
+                        staIpEl.textContent = "Desconectado";
                         staSsidRow.style.display = "none";
                     }
                 })
@@ -457,7 +483,8 @@ const char *getWiFiManagementPage()
             box.innerHTML = '<div class="empty-hint">Varrendo canais de rádio 2.4GHz...</div>';
 
             fetch('/scanwifi', { method: 'POST' })
-                .then(() => {
+                .then(r => {
+                    if (tratarNaoAutorizado(r)) return;
                     setTimeout(consultarResultadoScan, 3500);
                 })
                 .catch(() => {
@@ -468,20 +495,25 @@ const char *getWiFiManagementPage()
         }
 
         /**
-         * Obtém o resultado da varredura
+         * Obtém o resultado da varredura usando criação segura de DOM (anti-XSS)
          */
         function consultarResultadoScan() {
             const btn = document.getElementById('btn-scan');
             const box = document.getElementById('scan-box');
 
             fetch('/scanstatus')
-                .then(r => r.json())
+                .then(r => {
+                    if (tratarNaoAutorizado(r)) return null;
+                    return r.json();
+                })
                 .then(redes => {
+                    if (!redes) return;
+
                     btn.disabled = false;
                     btn.innerText = '🔍 Escanear Redes Wi-Fi';
                     box.innerHTML = '';
 
-                    if (!redes || redes.length === 0) {
+                    if (redes.length === 0) {
                         box.innerHTML = '<div class="empty-hint">Nenhuma rede encontrada. Tente novamente.</div>';
                         return;
                     }
@@ -489,11 +521,18 @@ const char *getWiFiManagementPage()
                     redes.forEach(rede => {
                         const div = document.createElement('div');
                         div.className = 'network-item';
-                        div.onclick = () => selecionarRede(rede.ssid);
-                        div.innerHTML = `
-                            <span class="network-name">📶 ${rede.ssid}</span>
-                            <span class="network-signal">${rede.rssi} dBm</span>
-                        `;
+                        div.addEventListener('click', () => selecionarRede(rede.ssid));
+
+                        const spanNome = document.createElement('span');
+                        spanNome.className = 'network-name';
+                        spanNome.textContent = '📶 ' + rede.ssid;
+
+                        const spanSinal = document.createElement('span');
+                        spanSinal.className = 'network-signal';
+                        spanSinal.textContent = rede.rssi + ' dBm';
+
+                        div.appendChild(spanNome);
+                        div.appendChild(spanSinal);
                         box.appendChild(div);
                     });
                 })
@@ -533,6 +572,7 @@ const char *getWiFiManagementPage()
 
             fetch('/salvarwifi', { method: 'POST', body: dados })
                 .then(r => {
+                    if (tratarNaoAutorizado(r)) return;
                     if (!r.ok) throw new Error();
                     form.reset();
                     listarRedesSalvas();
@@ -542,14 +582,32 @@ const char *getWiFiManagementPage()
                     const checarConexao = setInterval(() => {
                         tentativas++;
                         fetch('/ipdarede')
-                            .then(res => res.json())
+                            .then(res => {
+                                if (tratarNaoAutorizado(res)) {
+                                    clearInterval(checarConexao);
+                                    return null;
+                                }
+                                return res.json();
+                            })
                             .then(d => {
+                                if (!d) return;
+
                                 const ipExterno = d.ip_sta || (d.ip !== "192.168.26.7" && d.ip !== "0.0.0.0" ? d.ip : "");
                                 if (d.conectado || (ipExterno && ipExterno.length > 7)) {
                                     clearInterval(checarConexao);
                                     btnSubmit.disabled = false;
                                     msg.className = 'alert alert-success';
-                                    msg.innerHTML = `Conectado com sucesso!<br>IP na rede externa: <a href="http://${ipExterno}" target="_blank" style="font-weight:bold; color:#155724;">http://${ipExterno}</a>`;
+                                    msg.innerHTML = '';
+                                    msg.appendChild(document.createTextNode('Conectado com sucesso!'));
+                                    msg.appendChild(document.createElement('br'));
+                                    msg.appendChild(document.createTextNode('IP na rede externa: '));
+                                    const a = document.createElement('a');
+                                    a.href = 'http://' + ipExterno;
+                                    a.target = '_blank';
+                                    a.style.fontWeight = 'bold';
+                                    a.style.color = '#155724';
+                                    a.textContent = 'http://' + ipExterno;
+                                    msg.appendChild(a);
                                     atualizarIP();
                                 } else if (tentativas >= 12) { // 12 x 1.5s = 18 segundos
                                     clearInterval(checarConexao);
@@ -568,27 +626,48 @@ const char *getWiFiManagementPage()
                 });
         }
 
+        /**
+         * Lista apenas os SSIDs salvos na Flash via criação segura de DOM (anti-XSS)
+         */
         function listarRedesSalvas() {
             fetch('/listadewifi')
-                .then(r => r.text())
+                .then(r => {
+                    if (tratarNaoAutorizado(r)) return null;
+                    return r.text();
+                })
                 .then(txt => {
+                    if (txt === null) return;
+
                     const box = document.getElementById('saved-list');
                     box.innerHTML = '';
                     const linhas = txt.trim().split('\n');
                     let encontrou = false;
 
                     linhas.forEach(linha => {
-                        linha = linha.trim();
-                        if (linha.length > 0) {
+                        const ssid = linha.trim();
+                        if (ssid.length > 0) {
                             encontrou = true;
-                            const partes = linha.split(',');
-                            const ssid = partes[0];
-                            box.innerHTML += `
-                                <div class="saved-row">
-                                    <span><strong>${ssid}</strong></span>
-                                    <a class="del-link" href="#" onclick="excluirRede('${encodeURIComponent(ssid)}'); return false;">Excluir</a>
-                                </div>
-                            `;
+
+                            const row = document.createElement('div');
+                            row.className = 'saved-row';
+
+                            const spanWrap = document.createElement('span');
+                            const strong = document.createElement('strong');
+                            strong.textContent = ssid;
+                            spanWrap.appendChild(strong);
+
+                            const delLink = document.createElement('a');
+                            delLink.className = 'del-link';
+                            delLink.href = '#';
+                            delLink.textContent = 'Excluir';
+                            delLink.addEventListener('click', (ev) => {
+                                ev.preventDefault();
+                                excluirRede(ssid);
+                            });
+
+                            row.appendChild(spanWrap);
+                            row.appendChild(delLink);
+                            box.appendChild(row);
                         }
                     });
 
@@ -598,10 +677,22 @@ const char *getWiFiManagementPage()
                 });
         }
 
+        /**
+         * Remove rede salva enviando POST (proteção anti-CSRF)
+         */
         function excluirRede(ssid) {
             if (!confirm('Deseja excluir a rede salva?')) return;
-            fetch('/excluirwifi?ssid=' + ssid)
-                .then(() => {
+
+            const body = new URLSearchParams();
+            body.append('ssid', ssid);
+
+            fetch('/excluirwifi', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: body.toString()
+            })
+                .then(r => {
+                    if (tratarNaoAutorizado(r)) return;
                     listarRedesSalvas();
                     atualizarIP();
                 });
@@ -609,6 +700,8 @@ const char *getWiFiManagementPage()
 
         function toggleTema() {
             document.body.classList.toggle('night-mode');
+            const modoEscuro = document.body.classList.contains('night-mode');
+            localStorage.setItem('energizar_theme', modoEscuro ? 'night' : 'light');
         }
     </script>
 </body>

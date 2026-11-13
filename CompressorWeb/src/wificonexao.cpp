@@ -28,6 +28,33 @@ static unsigned long inicioTentativaConexao = 0;
 static unsigned long ultimoCheckReconexao = 0;
 
 // -------------------------------------------------------------------------
+// Utilitário Interno: Escape Seguro de Strings para JSON
+// -------------------------------------------------------------------------
+static String escapeJSONString(const String &texto)
+{
+    String out;
+    out.reserve(texto.length() + 8);
+
+    for (size_t i = 0; i < texto.length(); i++)
+    {
+        char c = texto[i];
+        if (c == '\"')
+        {
+            out += "\\\"";
+        }
+        else if (c == '\\')
+        {
+            out += "\\\\";
+        }
+        else if ((uint8_t)c >= 0x20)
+        {
+            out += c;
+        }
+    }
+    return out;
+}
+
+// -------------------------------------------------------------------------
 // 3. Configuração do Ponto de Acesso Industrial (Modo Dual WIFI_AP_STA)
 // -------------------------------------------------------------------------
 void setupAP()
@@ -112,7 +139,13 @@ void loadSavedWiFiNetworks()
             CredencialWiFi cred;
             cred.ssid = line.substring(0, sep);
             cred.pass = line.substring(sep + 1);
-            redesSalvas.push_back(cred);
+            cred.ssid.trim();
+            cred.pass.trim();
+
+            if (cred.ssid.length() > 0 && cred.ssid.length() <= MAX_SSID_LEN)
+            {
+                redesSalvas.push_back(cred);
+            }
         }
     }
     file.close();
@@ -212,7 +245,7 @@ String getScanResults()
     String json = "[";
     for (int i = 0; i < n; i++)
     {
-        json += "{\"ssid\":\"" + WiFi.SSID(i) + "\",\"rssi\":" + String(WiFi.RSSI(i)) + "}";
+        json += "{\"ssid\":\"" + escapeJSONString(WiFi.SSID(i)) + "\",\"rssi\":" + String(WiFi.RSSI(i)) + "}";
         if (i < n - 1)
             json += ",";
     }

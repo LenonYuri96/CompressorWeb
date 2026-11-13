@@ -31,6 +31,21 @@
  *      Mesmo que a pagina seja recarregada ou aberta simultaneamente em
  *      multiplos dispositivos, todos exibem a mesma contagem regressiva
  *      sincronizada no segundo exato com o microcontrolador.
+ *
+ *   5. ECONOMIA DE HEAP E HARDENING DE SEGURANCA (v2.1.0):
+ *      - Documento HTML servido como const char * direto da Flash (zero copia
+ *        de ~12 KB na RAM a cada GET /dashboard).
+ *      - Serializacao de /motor-state em buffer estatico na stack (snprintf),
+ *        evitando fragmentacao de Heap durante o polling de 1 segundo.
+ *      - Endpoint /motor-state protegido por isAuthenticated() e utilizando a
+ *        variavel debounced pressostatoAtivo.
+ *      - Acionamentos /toggle despachados via HTTP POST (anti-CSRF).
+ *
+ *   6. CONTAGEM REGRESSIVA DESACOPLADA DE ALARMES E IA LOCAL (v2.2.0):
+ *      - O cronometro visual continua sendo decrementado e renderizado mesmo
+ *        quando ha alarme de sobrecarga, manutencao, pressostato ou horario.
+ *      - Alertas preditivos da IA local (ia_local.cpp) sao exibidos na caixa
+ *        .message-box.info ja existente sem alterar a estetica do painel.
  * ============================================================================
  */
 
@@ -49,6 +64,7 @@
 #include "manutencao.h"
 #include "sobrecarga.h"
 #include "pressostato.h"
+#include "ia_local.h"
 
 // ============================================================================
 // SECAO 2: REGISTRO DE ROTAS E CONTROLADORES HTTP DO DASHBOARD
@@ -76,8 +92,9 @@ void setupDashboardPage(AsyncWebServer &server)
             return;
         }
 
-        // String literal em Flash contendo a aplicacao Web completa
-        String html = R"rawliteral(
+        // Ponteiro para string literal em Flash contendo a aplicacao Web completa
+        // (zero alocacao na Heap a cada acesso HTTP GET /dashboard)
+        const char *html = R"rawliteral(
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
@@ -325,6 +342,7 @@ void setupDashboardPage(AsyncWebServer &server)
         <a href="/wifigerenciamento" class="btn-link btn-link-wifi">Configurar Wi-Fi</a>
         <a href="/umidade" class="btn-link btn-link-umidade">Monitor de Umidade</a>
         <a href="/pressao" class="btn-link btn-link-pressao">Monitor de Pressão</a>
+        <a href="/ia" class="btn-link btn-link-wifi">Monitor de IA (Tempo Real)</a>
         <button type="button" class="btn-link btn-link-theme" onclick="toggleTema()">🌓 Alternar Tema</button>
         <a href="/logout" class="btn-link btn-link-logout">Encerrar Sessão</a>
     </div>
@@ -383,15 +401,21 @@ void setupDashboardPage(AsyncWebServer &server)
      * consultarEstadoESP32()
      * -------------------------------------------------------------
      * Consulta ciclica assincrona que recupera o estado operacional,
-     * alarmes industriais e saldos temporais de cada motor.
+     * alarmes industriais, alertas preditivos da IA e saldos temporais.
      */
     function consultarEstadoESP32() {
         fetch('/motor-state')
             .then(res => {
+                if (res.status === 401 || res.status === 403) {
+                    window.location.href = '/';
+                    return null;
+                }
                 if (!res.ok) throw new Error("Erro de resposta HTTP");
                 return res.json();
             })
             .then(data => {
+                if (!data) return;
+
                 const nomes = ["Compressor", "Ventilador", "Secador"];
 
                 for (let i = 0; i < 3; i++) {
@@ -411,6 +435,18 @@ void setupDashboardPage(AsyncWebServer &server)
                     let msgTexto = "";
                     let msgTipo = "";
                     let desabilitar = false;
+
+                    // ----------------------------------------------------------
+                    // RENDERIZACAO INDEPENDENTE DO CRONOMETRO (v2.2.0):
+                    // O texto da contagem regressiva eh atualizado ANTES e
+                    // INDEPENDENTEMENTE da hierarquia de seguranca abaixo.
+                    // ----------------------------------------------------------
+                    if (timerAtivo && segundosRestantes[i] > 0) {
+                        const motivo = estadoMotores[i] ? "Mínimo ligado" : "Descanso";
+                        countdownElements[i].innerText = `${motivo}: ${formatarTempo(segundosRestantes[i])}`;
+                    } else {
+                        countdownElements[i].innerText = "";
+                    }
 
                     // Hierarquia de Seguranca: 1. Falha Termica de Sobrecarga
                     if (sobrecarga) {
@@ -447,12 +483,12 @@ void setupDashboardPage(AsyncWebServer &server)
                     // Hierarquia de Seguranca: 5. Temporizador Anti-Curto-Ciclo Ativo
                     else if (timerAtivo && segundosRestantes[i] > 0) {
                         desabilitar = true;
-                        // Define rotulo conforme o motor esteja em marcha ou repouso
-                        const motivo = estadoMotores[i] ? "Mínimo ligado" : "Descanso";
-                        countdownElements[i].innerText = `${motivo}: ${formatarTempo(segundosRestantes[i])}`;
                     }
-                    else {
-                        countdownElements[i].innerText = "";
+
+                    // Diagnostico Preditivo da IA Local (usa .message-box.info ja existente)
+                    if (msgTexto === "" && data[`iaAlerta${i + 1}`] && data[`iaAlerta${i + 1}`] !== "") {
+                        msgTexto = data[`iaAlerta${i + 1}`];
+                        msgTipo = "info";
                     }
 
                     // Aplica estados e classes visuais atualizadas
@@ -478,8 +514,8 @@ void setupDashboardPage(AsyncWebServer &server)
     /**
      * enviarComando()
      * -------------------------------------------------------------
-     * Envia ordem de alternancia (Toggle) via chamada assincrona ao
-     * endpoint /toggle do servidor ESP32.
+     * Envia ordem de alternancia (Toggle) via HTTP POST assincrono
+     * ao endpoint /toggle do servidor ESP32 (protegido contra CSRF).
      *
      * @param motorIdx Indice do motor selecionado (0 a 2).
      */
@@ -496,12 +532,28 @@ void setupDashboardPage(AsyncWebServer &server)
         bloqueioAtivo[motorIdx] = true;
         toggleButtons[motorIdx].classList.add('btn-locked');
 
-        // Despacha a requisicao HTTP com parâmetros de query string
-        fetch(`/toggle?action=${acao}&motor=${motorIdx + 1}`)
-            .then(res => res.text())
+        const bodyParams = new URLSearchParams();
+        bodyParams.append('action', acao);
+        bodyParams.append('motor', String(motorIdx + 1));
+
+        // Despacha a requisicao HTTP POST (query + corpo para total compatibilidade)
+        fetch(`/toggle?action=${acao}&motor=${motorIdx + 1}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: bodyParams.toString()
+        })
+            .then(res => {
+                if (res.status === 401 || res.status === 403 || res.redirected) {
+                    window.location.href = '/';
+                    return null;
+                }
+                return res.text();
+            })
             .then(resposta => {
-                // Consulta o estado oficial atualizado no ESP32 imediatamente
-                consultarEstadoESP32();
+                if (resposta !== null) {
+                    // Consulta o estado oficial atualizado no ESP32 imediatamente
+                    consultarEstadoESP32();
+                }
             })
             .catch(err => {
                 console.error("[COMANDO] Falha no envio da ordem:", err);
@@ -520,13 +572,19 @@ void setupDashboardPage(AsyncWebServer &server)
         // Polling de sincronizacao continua a cada 1000 milissegundos
         setInterval(consultarEstadoESP32, 1000);
 
-        // Decremento local a cada 1 segundo para garantir fluidez visual
+        // -------------------------------------------------------------
+        // DECREMENTO LOCAL DO CRONOMETRO (v2.2.0):
+        // Roda SEMPRE que houver segundosRestantes[i] > 0, sem depender de
+        // bloqueioAtivo[i].
+        // -------------------------------------------------------------
         setInterval(() => {
             for (let i = 0; i < 3; i++) {
-                if (bloqueioAtivo[i] && segundosRestantes[i] > 0) {
+                if (segundosRestantes[i] > 0) {
                     segundosRestantes[i]--;
                     const motivo = estadoMotores[i] ? "Mínimo ligado" : "Descanso";
-                    countdownElements[i].innerText = `${motivo}: ${formatarTempo(segundosRestantes[i])}`;
+                    countdownElements[i].innerText = segundosRestantes[i] > 0
+                        ? `${motivo}: ${formatarTempo(segundosRestantes[i])}`
+                        : "";
                 }
             }
         }, 1000);
@@ -552,50 +610,78 @@ void setupDashboardPage(AsyncWebServer &server)
 </html>
         )rawliteral";
 
-        // Despacha o documento HTML consolidado para o navegador
+        // Despacha o documento HTML diretamente da Flash para o navegador
         request->send(200, "text/html", html); });
 
     // ========================================================================
-    // ROTA 2: Endpoint REST /motor-state (Telemetria e Segundos em Tempo Real)
+    // ROTA 2: Endpoint REST /motor-state (Telemetria, Timers e IA em Tempo Real)
     // ========================================================================
     server.on("/motor-state", HTTP_GET, [](AsyncWebServerRequest *request)
               {
-        // Avaliacao de hardware: leitura do pino fisico do pressostato
-        bool pressostato = (digitalRead(17) == HIGH);
+        // Valida sessao autenticada antes de expor telemetria dos compressores
+        if (!isAuthenticated(request))
+        {
+            request->send(401, "application/json", "{\"erro\":\"nao_autorizado\"}");
+            return;
+        }
 
         // Avaliacao de integridade da janela operacional de horario
         bool foraDeHorario = (isAfterClosingTime() || isBeforeOpeningTime());
 
-        // Serializacao JSON estruturada contendo todos os dados operacionais
-        String json = "{";
+        // Serializacao JSON em buffer estatico (zero alocacao dinamica de String)
+        // contendo: estados soberanos, sensores com debounce, sobrecarga, timers,
+        // saldos exatos e diagnosticos da IA local adaptativa
+        char json[1024];
+        snprintf(json, sizeof(json),
+                 "{"
+                 "\"compressorLigadoMotor1\":%s,"
+                 "\"compressorLigadoMotor2\":%s,"
+                 "\"compressorLigadoMotor3\":%s,"
+                 "\"sistemaEmManutencao\":%s,"
+                 "\"pressostatoAtivo\":%s,"
+                 "\"foraDoHorario\":%s,"
+                 "\"sobrecargaMotor1\":%s,"
+                 "\"sobrecargaMotor2\":%s,"
+                 "\"sobrecargaMotor3\":%s,"
+                 "\"motorTimerActive1\":%s,"
+                 "\"motorTimerActive2\":%s,"
+                 "\"motorTimerActive3\":%s,"
+                 "\"motorRemainingTime1\":%lu,"
+                 "\"motorRemainingTime2\":%lu,"
+                 "\"motorRemainingTime3\":%lu,"
+                 "\"iaSaude1\":%u,"
+                 "\"iaSaude2\":%u,"
+                 "\"iaSaude3\":%u,"
+                 "\"iaAlerta1\":\"%s\","
+                 "\"iaAlerta2\":\"%s\","
+                 "\"iaAlerta3\":\"%s\""
+                 "}",
+                 motoresLigados[0] ? "true" : "false",
+                 motoresLigados[1] ? "true" : "false",
+                 motoresLigados[2] ? "true" : "false",
+                 sistemaEmManutencao ? "true" : "false",
+                 pressostatoAtivo ? "true" : "false",
+                 foraDeHorario ? "true" : "false",
+                 sobrecargaDetectada[0] ? "true" : "false",
+                 sobrecargaDetectada[1] ? "true" : "false",
+                 sobrecargaDetectada[2] ? "true" : "false",
+                 isMotorTimerActive(0) ? "true" : "false",
+                 isMotorTimerActive(1) ? "true" : "false",
+                 isMotorTimerActive(2) ? "true" : "false",
+                 getMotorRemainingTime(0),
+                 getMotorRemainingTime(1),
+                 getMotorRemainingTime(2),
+                 (unsigned int)iaLocal.getSaudePercentual(0),
+                 (unsigned int)iaLocal.getSaudePercentual(1),
+                 (unsigned int)iaLocal.getSaudePercentual(2),
+                 iaLocal.getAlerta(0),
+                 iaLocal.getAlerta(1),
+                 iaLocal.getAlerta(2));
 
-        // 1. Estados soberanos de intencao operacional em memoria RAM
-        json += "\"compressorLigadoMotor1\":" + String(motoresLigados[0] ? "true" : "false") + ",";
-        json += "\"compressorLigadoMotor2\":" + String(motoresLigados[1] ? "true" : "false") + ",";
-        json += "\"compressorLigadoMotor3\":" + String(motoresLigados[2] ? "true" : "false") + ",";
-
-        // 2. Sensores globais de protecao e chaves fisicas
-        json += "\"sistemaEmManutencao\":" + String(sistemaEmManutencao ? "true" : "false") + ",";
-        json += "\"pressostatoAtivo\":" + String(pressostato ? "true" : "false") + ",";
-        json += "\"foraDoHorario\":" + String(foraDeHorario ? "true" : "false") + ",";
-
-        // 3. Alarmes individuais de sobrecarga termica bimetalica
-        json += "\"sobrecargaMotor1\":" + String(sobrecargaDetectada[0] ? "true" : "false") + ",";
-        json += "\"sobrecargaMotor2\":" + String(sobrecargaDetectada[1] ? "true" : "false") + ",";
-        json += "\"sobrecargaMotor3\":" + String(sobrecargaDetectada[2] ? "true" : "false") + ",";
-
-        // 4. Sinalizadores booleanos de vigencia do temporizador de descanso
-        json += "\"motorTimerActive1\":" + String(isMotorTimerActive(0) ? "true" : "false") + ",";
-        json += "\"motorTimerActive2\":" + String(isMotorTimerActive(1) ? "true" : "false") + ",";
-        json += "\"motorTimerActive3\":" + String(isMotorTimerActive(2) ? "true" : "false") + ",";
-
-        // 5. Saldo EXATO de segundos restantes calculado diretamente pelo ESP32
-        json += "\"motorRemainingTime1\":" + String(getMotorRemainingTime(0)) + ",";
-        json += "\"motorRemainingTime2\":" + String(getMotorRemainingTime(1)) + ",";
-        json += "\"motorRemainingTime3\":" + String(getMotorRemainingTime(2)) + "}";
-
-        // Envia resposta em formato application/json com codigo 200 (OK)
-        request->send(200, "application/json", json); });
+        // Envia resposta em formato application/json sem cache de navegador
+        AsyncWebServerResponse *response = request->beginResponse(200, "application/json", json);
+        response->addHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+        request->send(response); });
 }
 
 // ============================================================================

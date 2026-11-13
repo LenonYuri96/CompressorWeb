@@ -5,24 +5,30 @@
  * DESCRIÇÃO: Orquestrador principal do firmware industrial. Gerencia o ciclo de
  *            vida do hardware, o escalonamento cooperativo não-bloqueante de
  *            tarefas, watchdog de hardware, métricas de memória, roteamento
- *            REST assíncrono e proteções de intertravamento dos compressores.
+ *            REST assíncrono, IA local adaptativa e proteções de
+ *            intertravamento dos compressores.
  * ============================================================================
  *
  * ARQUITETURA DO LOOP PRINCIPAL (COOPERATIVO NÃO-BLOQUEANTE):
  * +--------------------------------------------------------------------------+
  * | loop()                                                                   |
  * |  |--> [Sub-ms] processarPulsosMotores()   (Desliga pulsos de 500 ms)     |
+ * |  |--> [Sub-ms] iaLocal.processar()        (Edge AI adaptativa local)     |
  * |  |--> [Sub-ms] processarConexaoWiFi()     (Máquina de estados Wi-Fi)     |
  * |  |--> [Sub-ms] atualizarEstadoManutencao() (Filtro da chave física)      |
  * |  |--> [ 100ms] monitorarSobrecarga()      (Relés térmicos)               |
  * |  |--> [ 200ms] verificarPressostato()     (Sensor de pressão de linha)   |
  * |  |--> [1000ms] monitorarStatusCompressores() (Feedback dos contatores)   |
- * |  |--> [5000ms] atualizarEstadoMotores()   (Sincronização e travas)       |
- * |  |--> [60 seg] updateTimers()             (Contagem de descanso)         |
+ * |  |--> [5000ms] atualizarEstadoMotores()   (Sincronização, timers/travas) |
+ * |  |--> [60 seg] updateTimers()             (Persistência dos cronômetros) |
  * |  |--> [ 5 min] updateTime()               (Sincronização SNTP)           |
- * |  +--> [ 5 seg] Alimentação do Watchdog de Hardware (TWDT)                |
+ * |  +--> [30 seg] registrarMetricasLoop()    (Telemetria + Saúde + IA)      |
  * +--------------------------------------------------------------------------+
  */
+
+// ============================================================================
+// SEÇÃO 1: BIBLIOTECAS E MÓDULOS DO SISTEMA DE AUTOMAÇÃO
+// ============================================================================
 
 #include <Arduino.h>
 #include <WiFi.h>
@@ -46,6 +52,8 @@
 #include "manutencao.h"
 #include "sobrecarga.h"
 #include "pressostato.h"
+#include "ia_local.h"
+#include "ia_monitor.h"
 
 // -------------------------------------------------------------------------
 // 1. Constantes e Configurações do Watchdog e Tarefas
@@ -71,7 +79,7 @@ static unsigned long lastCompressorCheck = 0;
 const unsigned long INTERVALO_STATUS_MS = 1000; // Feedback físico dos contatores (1 s)
 
 static unsigned long lastSyncMotoresCheck = 0;
-const unsigned long INTERVALO_SYNCMOTOR_MS = 5000; // Validação de travas de horário (5 s)
+const unsigned long INTERVALO_SYNCMOTOR_MS = 5000; // Validação de travas e timers (5 s)
 
 static unsigned long lastTimerUpdate = 0;
 const unsigned long INTERVALO_TIMERS_MS = 60000; // Atualização dos cronômetros (1 min)
@@ -219,11 +227,12 @@ void setup()
     Serial.println("[SETUP] Configurando cliente de relógio NTP nativo...");
     setupTimeClient();
 
-    // 7. Configura módulos de hardware, entradas de intertravamento e proteções térmicas
-    Serial.println("[SETUP] Configurando entradas de manutenção e sobrecarga...");
+    // 7. Configura módulos de hardware, entradas de intertravamento e IA local adaptativa
+    Serial.println("[SETUP] Configurando entradas de manutenção, sobrecarga e IA...");
     setupManutencao();
     setupSobrecarga();
     setupPressostato();
+    iaLocal.begin();
 
     // 8. Inicializa controle dos motores (Saídas de pulso de relé e leituras de status)
     Serial.println("[SETUP] Configurando saídas de acionamento dos compressores...");
@@ -258,10 +267,12 @@ void loop()
     unsigned long currentMillis = millis();
 
     // ---------------------------------------------------------------------
-    // TAREFA 1: PRIORIDADE MÁXIMA - Pulso dos Contatores (Sub-milissegundo)
+    // TAREFA 1: PRIORIDADE MÁXIMA - Pulso dos Contatores e IA Local (Sub-ms)
     // ---------------------------------------------------------------------
-    // Desliga os pinos de pulso de 500 ms assim que o tempo expira, sem atrasos
+    // Desliga os pinos de pulso de 500 ms assim que o tempo expira e captura
+    // a latência física real dos contatores sem atrasos bloqueantes
     processarPulsosMotores();
+    iaLocal.processar();
 
     // ---------------------------------------------------------------------
     // TAREFA 2: Gerenciamento Contínuo da Conexão Wi-Fi em Segundo Plano
@@ -382,6 +393,10 @@ static void registrarMetricasLoop()
                   motoresLigados[0] ? "ON" : "OFF",
                   motoresLigados[1] ? "ON" : "OFF",
                   motoresLigados[2] ? "ON" : "OFF");
+    Serial.printf("[TELEMETRIA] Saúde IA: M1=%u%% (%s), M2=%u%% (%s), M3=%u%% (%s)\n",
+                  iaLocal.getSaudePercentual(0), iaLocal.getModoString(0),
+                  iaLocal.getSaudePercentual(1), iaLocal.getModoString(1),
+                  iaLocal.getSaudePercentual(2), iaLocal.getModoString(2));
     Serial.println("--------------------------------------------------");
 }
 
@@ -399,6 +414,7 @@ void setupServer()
     setupDashboardPage(server);
     setupUmidadePage(server);
     setupPressaoPage(server);
+    setupIAMonitorPage(server);
     setupWiFiGerenciadorPage(server);
 
     // Telas de Erro e Exceção HTTP
@@ -452,6 +468,12 @@ void configureRoutes()
     // ---------------------------------------------------------------------
     server.on("/status", HTTP_GET, [](AsyncWebServerRequest *request)
               {
+        if (!isAuthenticated(request))
+        {
+            request->send(401, "application/json", "{\"erro\":\"nao_autorizado\"}");
+            return;
+        }
+
         String statusJSON = "{";
         for (int i = 0; i < NUM_MOTORES; i++)
         {
@@ -463,13 +485,21 @@ void configureRoutes()
         }
         statusJSON += "}";
 
-        request->send(200, "application/json", statusJSON); });
+        AsyncWebServerResponse *response = request->beginResponse(200, "application/json", statusJSON);
+        response->addHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+        request->send(response); });
 
     // ---------------------------------------------------------------------
-    // ROTA API 5: Telemetria Completa de Diagnóstico do Sistema (JSON)
+    // ROTA API 5: Telemetria Completa de Diagnóstico e IA Local (JSON)
     // ---------------------------------------------------------------------
     server.on("/api/telemetria", HTTP_GET, [](AsyncWebServerRequest *request)
               {
+        if (!isAuthenticated(request))
+        {
+            request->send(401, "application/json", "{\"erro\":\"nao_autorizado\"}");
+            return;
+        }
+
         String json = "{";
         json += "\"heap_livre\":" + String(ESP.getFreeHeap()) + ",";
         json += "\"heap_minimo\":" + String(minRecordedFreeHeap) + ",";
@@ -482,18 +512,34 @@ void configureRoutes()
         json += "\"modo_ap\":" + String(isAPMode ? "true" : "false") + ",";
         json += "\"manutencao\":" + String(sistemaEmManutencao ? "true" : "false") + ",";
         json += "\"pressostato\":" + String(pressostatoAtivo ? "true" : "false") + ",";
+        json += "\"ia_demanda_hora_atual\":" + String(iaLocal.getDemandaHoraAtual()) + ",";
         json += "\"motores\":[";
+
         for (int i = 0; i < NUM_MOTORES; i++)
         {
             json += "{\"id\":" + String(i + 1) + ",";
             json += "\"ligado\":" + String(motoresLigados[i] ? "true" : "false") + ",";
             json += "\"sobrecarga\":" + String(sobrecargaDetectada[i] ? "true" : "false") + ",";
-            json += "\"timer_ativo\":" + String(isMotorTimerActive(i) ? "true" : "false") + "}";
-            if (i < NUM_MOTORES - 1) json += ",";
+            json += "\"timer_ativo\":" + String(isMotorTimerActive(i) ? "true" : "false") + ",";
+            json += "\"timer_restante_s\":" + String(getMotorRemainingTime(i)) + ",";
+            json += "\"ia_modo\":\"" + String(iaLocal.getModoString(i)) + "\",";
+            json += "\"ia_saude\":" + String(iaLocal.getSaudePercentual(i)) + ",";
+            json += "\"ia_amostras\":" + String(iaLocal.getAmostras(i)) + ",";
+            json += "\"ia_latencia_ms\":" + String(iaLocal.getMediaLatenciaMs(i), 1) + ",";
+            json += "\"ia_duracao_media_s\":" + String(iaLocal.getMediaDuracaoSeg(i), 1) + ",";
+            json += "\"ia_score\":" + String(iaLocal.getScore(i), 2) + ",";
+            json += "\"ia_alerta\":\"" + String(iaLocal.getAlerta(i)) + "\"}";
+
+            if (i < NUM_MOTORES - 1)
+            {
+                json += ",";
+            }
         }
         json += "]}";
 
-        request->send(200, "application/json", json); });
+        AsyncWebServerResponse *response = request->beginResponse(200, "application/json", json);
+        response->addHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+        request->send(response); });
 
     // ---------------------------------------------------------------------
     // ROTA API 6: Parada Geral de Emergência (Corte Instantâneo dos Contatores)
@@ -535,6 +581,38 @@ void configureRoutes()
             vTaskDelay(pdMS_TO_TICKS(2000));
             esp_restart();
         }, "reboot_task", 2048, NULL, 1, NULL); });
+
+    // ---------------------------------------------------------------------
+    // ROTA API 8: Recalibração Segura da IA Local (Após troca de contator)
+    // ---------------------------------------------------------------------
+    server.on("/api/ia/reset", HTTP_POST, [](AsyncWebServerRequest *request)
+              {
+        if (!isAuthenticated(request))
+        {
+            request->send(401, "application/json", "{\"erro\":\"nao_autorizado\"}");
+            return;
+        }
+
+        int motorIdx = -1;
+        if (request->hasParam("motor", true))
+        {
+            int m = request->getParam("motor", true)->value().toInt() - 1;
+            if (m >= 0 && m < NUM_MOTORES)
+            {
+                motorIdx = m;
+            }
+        }
+        else if (request->hasParam("motor"))
+        {
+            int m = request->getParam("motor")->value().toInt() - 1;
+            if (m >= 0 && m < NUM_MOTORES)
+            {
+                motorIdx = m;
+            }
+        }
+
+        iaLocal.resetarModelo(motorIdx);
+        request->send(200, "application/json", "{\"status\":\"ia_recalibrada\"}"); });
 }
 
 // -------------------------------------------------------------------------

@@ -8,25 +8,29 @@
  *   compressores industriais. Este modulo atua como o nucleo de controle de
  *   potencia da planta, operando sob regime cooperativo estritamente nao-
  *   bloqueante (sem uso de delay ou lacos de espera travantes), garantindo que
- *   o Task Watchdog Timer (TWDT) e os servidores web assincronos permaneçam
+ *   o Task Watchdog Timer (TWDT) e os servidores web assincronos permanecam
  *   sempre responsivos.
  *
  * RESPONSABILIDADES DO MODULO:
  *   1. GERACAO DE PULSOS DE COMANDO (500 ms):
- *      Gera pulsos eletricos transitórios de 500 ms nas bobinas de acionamento
+ *      Gera pulsos eletricos transitorios de 500 ms nas bobinas de acionamento
  *      dos contatores industriais com temporizacao diferencial por millis(),
  *      evitando que reles fiquem permanentemente energizados e reduzindo
  *      o estresse termico nos drivers de comutacao.
  *
- *   2. PREVENCAO CONTRA CURTO-CICLO (TEMPORIZADORES DE DESCANSO):
- *      Controla janelas de tempo de seguranca apos operacoes de ligar (60 s)
- *      e desligar (10 s) para permitir equalizacao de pressoes mecânicas nos
- *      cabecotes dos compressores antes de qualquer nova partida.
+ *   2. PREVENCAO CONTRA CURTO-CICLO (TEMPORIZADORES INDEPENDENTES DA PAGINA):
+ *      Controla janelas de tempo de seguranca apos operacoes de ligar (3600 s)
+ *      e desligar (600 s) para permitir equalizacao de pressoes mecanicas nos
+ *      cabecotes dos compressores antes de qualquer nova partida. Toda a
+ *      contagem roda diretamente no ESP32 (RAM + SPIFFS), funcionando
+ *      continuamente mesmo fora da pagina, com navegador fechado, usuario
+ *      deslogado ou apos reinicializacao, com calculo imune a rollover de
+ *      49,7 dias do millis().
  *
  *   3. TELEMETRIA E HORIMETRO ACUMULADOR EM RAM:
  *      Contabiliza segundos acumulados de operacao de cada motor e ciclos de
  *      chaveamento de contatores sem degradar a memoria Flash, utilizando
- *      estrutura de telemetria volátil com sincronizacao controlada.
+ *      estrutura de telemetria volatil com sincronizacao controlada.
  *
  *   4. PERSISTENCIA SEGURA EM SPIFFS COM MEMORY CACHE (WEAR LEVELING):
  *      Implementa espelhamento em memoria RAM de todos os arquivos de estado
@@ -47,6 +51,18 @@
  *      eletrico serve para auditoria, diagnostico e contagem de horimetro,
  *      eliminando a falha que desligava o motor apos 4 segundos quando em
  *      bancada ou durante o tempo de transicao mecanica do contator.
+ *
+ *   7. DESLIGAMENTO CONDICIONAL DE EMERGENCIA (CORRECAO CRITICA v2.3.0):
+ *      A rotina desligarTodosMotores() somente emite pulso fisico nos canais
+ *      que efetivamente estao ligados (intencao logica OU feedback eletrico).
+ *      Elimina o defeito que pulsava todos os canais a cada 5 segundos durante
+ *      os periodos de bloqueio, evitando oscilacao continua em rele de impulso
+ *      e desgaste prematuro dos contatores.
+ *
+ *   8. GUARDA DE RE-DISPARO DE PULSO (CORRECAO CRITICA v2.3.1):
+ *      A funcao dispararPulsoMotor() agora rejeita novas solicitacoes enquanto
+ *      um pulso do mesmo canal estiver em curso, garantindo que a janela de
+ *      500 ms nao seja inadvertidamente estendida por chamadas reentrantes.
  *
  * MAPA DE ENTRADAS E SAIDAS (PINOUT FINAL DA VERSAO CONSOLIDADA):
  *   - Motor 0 (Compressor Principal) : Pulso GPIO 23 | Feedback GPIO 14
@@ -71,6 +87,11 @@
  *   v2.0.0 - Adicao de cache em RAM para reducao de desgaste da Flash.
  *   v2.1.0 - Correcao de colisao de hardware no GPIO 13 (movido para 23).
  *   v2.2.0 - Desacoplamento da auto-derrubada de estado pelo feedback.
+ *   v2.3.0 - Desligamento condicional: nao pulsa canais ja desligados.
+ *   v2.3.1 - Guarda de re-disparo em dispararPulsoMotor().
+ *   v2.3.2 - Inclusao de auditoria diagnostica por canal em desligamento.
+ *   v2.3.3 - /toggle via HTTP_POST, timers imunes a rollover de millis() e
+ *            auditoria periodica em background independente de pagina aberta.
  * ============================================================================
  */
 
@@ -82,6 +103,7 @@
 #include <FS.h>
 #include <SPIFFS.h>
 #include <ESPAsyncWebServer.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "ligadesliga.h"
@@ -90,37 +112,43 @@
 #include "manutencao.h"
 #include "pressostato.h"
 #include "sobrecarga.h"
+#include "ia_local.h"
 
 // ============================================================================
 // SECAO 2: DEFINICOES DE HARDWARE, MAPA DE PINOS E ALIASES GLOBAIS
 // ============================================================================
 
 /**
- * Pinos de SAIDA digital dedicados ao chaveamento dos reles de comando:
- *   Indice 0 -> Motor 1 (Compressor Principal) : GPIO 25
+ * Pinos de SAIDA digital dedicados ao chaveamento dos reles de comando.
+ *
+ * NOTA DE ENGENHARIA (v2.3.0):
+ *   O mapa abaixo reflete os GPIOs consolidados do projeto final. As saidas
+ *   utilizam pinos nativos seguros do ESP32-WROOM que nao conflitam com:
+ *     - Strapping pins (GPIO 0, 2, 12, 15);
+ *     - Barramentos internos de Flash (GPIO 6..11);
+ *     - UART0 de depuracao (GPIO 1 e 3);
+ *     - Rádio Wi-Fi integrado (evitando GPIOs sensiveis a ruido de RF).
+ *
+ *   Indice 0 -> Motor 1 (Compressor Principal) : GPIO 23
  *   Indice 1 -> Motor 2 (Motor Ventilador)     : GPIO 27
- *   Indice 2 -> Motor 3 (Motor Secador de Ar)  : GPIO 26
- *
- * Justificativa de Engenharia:
- *   GPIO 25, 27 e 26 sao pinos de saida nativos e seguros que nao interferem
- *   com funcoes de strapping do ESP32 nem com o rádio Wi-Fi integrado.
+ *   Indice 2 -> Motor 3 (Motor Secador de Ar)  : GPIO 33
  */
-int pinosMotores[NUM_MOTORES] = {25, 27, 26};
+int pinosMotores[NUM_MOTORES] = {23, 27, 33};
 
 /**
- * Pinos de ENTRADA digital para leitura dos contatos auxiliares NA dos contatores:
+ * Pinos de ENTRADA digital para leitura dos contatos auxiliares NA dos
+ * contatores. Todos configurados em INPUT_PULLDOWN para assegurar nivel LOW
+ * estavel na ausencia de fechamento mecanico do contato auxiliar.
+ *
  *   Indice 0 -> Retorno Feedback Motor 1 : GPIO 14
- *   Indice 1 -> Retorno Feedback Motor 2 : GPIO 33
+ *   Indice 1 -> Retorno Feedback Motor 2 : GPIO 26
  *   Indice 2 -> Retorno Feedback Motor 3 : GPIO 32
- *
- * Justificativa de Engenharia:
- *   Todos configurados em modo INPUT_PULLDOWN para assegurar nivel 0V (LOW)
- *   estavel na ausencia de fechamento fisico de contato mecânico.
  */
-int pinosStatus[NUM_MOTORES] = {14, 33, 32};
+int pinosStatus[NUM_MOTORES] = {14, 26, 32};
 
 /**
- * Aliases globais mantidos para retrocompatibilidade com modulos antigos.
+ * Aliases globais mantidos para retrocompatibilidade com modulos antigos
+ * que ainda referenciam os nomes historicos NUM_MOTORS e motorPins.
  */
 const int NUM_MOTORS = NUM_MOTORES;
 const int *motorPins = pinosMotores;
@@ -133,26 +161,41 @@ const int *motorPins = pinosMotores;
  * Vetor mestre com a intencao logica soberana de funcionamento dos motores:
  *   true  -> Motor com comando de funcionamento ATIVO (Ligado)
  *   false -> Motor com comando de funcionamento INATIVO (Desligado)
+ *
+ * Este vetor representa a ULTIMA ORDEM CONHECIDA do operador, nao o estado
+ * fisico observado pelo feedback. Sua soberania sobre o feedback eh intencional
+ * e faz parte da correcao arquitetural v2.2.0.
  */
 bool motoresLigados[NUM_MOTORES] = {false, false, false};
 
 /**
- * Sinalizador indicando se o temporizador anti-curto-ciclo esta ativo.
+ * Sinalizador indicando se o temporizador anti-curto-ciclo esta ativo para
+ * cada canal. Utilizado como flag de vigencia; a contagem segura eh mantida
+ * por timerInicioMs[] e timerDuracaoMs[] e espelhada em motorTimers[].
  */
 bool timersAtivos[NUM_MOTORES] = {false, false, false};
 
 /**
- * Snapshot do estado do ciclo imediatamente anterior para deteccao de borda.
+ * Snapshot do estado do ciclo imediatamente anterior para deteccao de borda
+ * em rotinas de diagnostico (nao utilizado como fonte de verdade operacional).
  */
 bool motoresEstadoAnterior[NUM_MOTORES] = {false, false, false};
 
 /**
- * Timestamp absoluto em milissegundos (millis) do encerramento do descanso.
+ * Timestamp alvo em milissegundos (base millis) do encerramento da janela
+ * de descanso, mantido para compatibilidade com modulos externos.
  */
 unsigned long motorTimers[NUM_MOTORES] = {0UL, 0UL, 0UL};
 
+/**
+ * Estruturas diferenciais internas (inicio + duracao em ms) imunes ao
+ * transbordamento (rollover) de 32 bits do millis() apos 49,7 dias.
+ */
+static unsigned long timerInicioMs[NUM_MOTORES] = {0UL, 0UL, 0UL};
+static unsigned long timerDuracaoMs[NUM_MOTORES] = {0UL, 0UL, 0UL};
+
 // ----------------------------------------------------------------------------
-// Caminhos canônicos dos arquivos persistidos no sistema de arquivos SPIFFS
+// Caminhos canonicos dos arquivos persistidos no sistema de arquivos SPIFFS.
 // ----------------------------------------------------------------------------
 extern const String arquivosMotores[NUM_MOTORES] = {
     "/motor1.txt",
@@ -174,27 +217,41 @@ extern const String arquivosTimers[NUM_MOTORES] = {
 // ============================================================================
 
 /**
- * Tempo minimo de descanso obrigatorio pos-partida (curto-ciclo) em segundos.
+ * Tempo minimo de descanso obrigatorio pos-partida (anti-curto-ciclo) em
+ * segundos. Apos qualquer LIGAR, o canal fica bloqueado por este periodo.
+ *
+ * NOTA: o valor consolidado em producao eh 3600 s (60 minutos), conforme
+ * exigencia do fabricante do compressor principal.
  */
 const unsigned long LIGAR_TIMEOUT = 3600UL;
 
 /**
- * Tempo minimo de descanso obrigatorio pos-parada (despressurizacao) em segundos.
+ * Tempo minimo de descanso obrigatorio pos-parada (despressurizacao) em
+ * segundos. Apos qualquer DESLIGAR, o canal fica bloqueado por este periodo.
+ *
+ * NOTA: 600 s (10 minutos) para permitir alivio completo da pressao residual
+ * nas linhas de ar antes de nova partida.
  */
 const unsigned long DESLIGAR_TIMEOUT = 600UL;
 
 /**
- * Largura do pulso de relé enviada as bobinas dos contatores em milissegundos.
+ * Largura do pulso de rele enviado as bobinas dos contatores em milissegundos.
+ * Este valor foi ajustado empiricamente para garantir pickup confiavel do
+ * contator sem manter a bobina energizada por tempo excessivo.
  */
 const unsigned long DURACAO_PULSO_MS = 500UL;
 
 /**
  * Janela temporal de debounce digital contra centelhamento de contatos (ms).
+ * Utilizada tanto para filtragem do feedback mecanico dos contatores quanto
+ * para a chave fisica de manutencao.
  */
 const unsigned long DEBOUNCE_STATUS_MS = 100UL;
 
 /**
  * Periodo de tolerancia de transicao eletromecanica pos-comando manual (ms).
+ * Reservado para futuras rotinas de diagnostico de "contator nao respondeu"
+ * que ainda serao incorporadas ao firmware.
  */
 const unsigned long TOLERANCIA_COMANDO_MS = 4000UL;
 
@@ -238,6 +295,20 @@ static unsigned long comandoManualTimestamp[NUM_MOTORES] = {0UL, 0UL, 0UL};
 /** Sinalizador que assegura o registro unico da rota assincrona /toggle */
 static bool toggleRouteConfigurada = false;
 
+/**
+ * Contador de pulsos efetivamente emitidos por canal. Serve como metrica de
+ * auditoria de desgaste eletrico das bobinas de contator e permite detectar
+ * anomalias de re-disparo em producao.
+ */
+static unsigned long pulsosEmitidos[NUM_MOTORES] = {0UL, 0UL, 0UL};
+
+/**
+ * Contador de pulsos REJEITADOS pela guarda de re-disparo. Um valor alto
+ * neste indicador sinaliza tentativa de acionamento duplicado ou condicao
+ * de sobreposicao de comandos que deve ser investigada.
+ */
+static unsigned long pulsosRejeitados[NUM_MOTORES] = {0UL, 0UL, 0UL};
+
 // ============================================================================
 // SECAO 6: MECANISMO DE GERACAO DE PULSOS DE COMANDO (NAO-BLOQUEANTE)
 // ============================================================================
@@ -247,25 +318,56 @@ static bool toggleRouteConfigurada = false;
  * ----------------------------------------------------------------------------
  * Aplica nivel logico HIGH no pino da bobina correspondente e registra o
  * instante inicial do pulso. A transicao de retorno para LOW ocorre de
- * maneira estritamente cooperativa e sem delay por processarPulsosMotores().
+ * maneira estritamente cooperativa por processarPulsosMotores().
+ *
+ * COMPORTAMENTO DE GUARDA (v2.3.1):
+ *   Se o canal alvo ja possui um pulso em curso, a nova solicitacao eh
+ *   silenciosamente REJEITADA (com auditoria em pulsosRejeitados). Isto evita
+ *   que chamadas reentrantes estendam inadvertidamente a janela de 500 ms,
+ *   protegendo o contator contra sobrecorrente de bobina.
  *
  * @param motorIdx Indice do motor alvo (0 a NUM_MOTORES - 1).
+ * @return true se o pulso foi efetivamente iniciado; false se rejeitado.
  */
-void dispararPulsoMotor(int motorIdx)
+bool dispararPulsoMotor(int motorIdx)
 {
+    // ----------------------------------------------------------------------
     // Validacao defensiva do indice para impedir violacao de memoria
+    // ----------------------------------------------------------------------
     if (motorIdx < 0 || motorIdx >= NUM_MOTORES)
     {
-        return;
+        Serial.printf("[HARDWARE_PULSO] ERRO: indice de motor invalido (%d).\n",
+                      motorIdx);
+        return false;
     }
 
-    // Energiza o pino de comando da bobina
+    // ----------------------------------------------------------------------
+    // GUARDA CRITICA: bloqueia re-disparo sobre pulso em curso
+    // ----------------------------------------------------------------------
+    if (pulsoAtivo[motorIdx])
+    {
+        pulsosRejeitados[motorIdx]++;
+        Serial.printf("[HARDWARE_PULSO] Motor %d: re-disparo rejeitado "
+                      "(pulso em curso, %lu ms decorridos).\n",
+                      motorIdx + 1,
+                      (unsigned long)(millis() - pulsoInicio[motorIdx]));
+        return false;
+    }
+
+    // ----------------------------------------------------------------------
+    // Energiza o pino de comando da bobina e registra inicio do pulso
+    // ----------------------------------------------------------------------
     digitalWrite(pinosMotores[motorIdx], HIGH);
     pulsoAtivo[motorIdx] = true;
     pulsoInicio[motorIdx] = millis();
+    pulsosEmitidos[motorIdx]++;
 
-    Serial.printf("[HARDWARE_PULSO] Motor %d (GPIO %d) -> Nivel HIGH iniciado.\n",
-                  motorIdx + 1, pinosMotores[motorIdx]);
+    Serial.printf("[HARDWARE_PULSO] Motor %d (GPIO %d) -> Nivel HIGH iniciado "
+                  "(pulso #%lu).\n",
+                  motorIdx + 1, pinosMotores[motorIdx],
+                  pulsosEmitidos[motorIdx]);
+
+    return true;
 }
 
 /**
@@ -274,6 +376,9 @@ void dispararPulsoMotor(int motorIdx)
  * Funcao de temporizacao cooperativa de sub-milissegundo chamada continuamente
  * a partir do loop() principal. Audita os tempos de duracao dos pulsos e
  * desliga comutando para LOW assim que a janela de 500 ms eh completada.
+ *
+ * IMPORTANTE: NAO UTILIZA delay(). Totalmente cooperativa com o scheduler
+ * assincrono e com o Task Watchdog Timer do ESP32.
  */
 void processarPulsosMotores()
 {
@@ -293,10 +398,55 @@ void processarPulsosMotores()
             digitalWrite(pinosMotores[i], LOW);
             pulsoAtivo[i] = false;
 
-            Serial.printf("[HARDWARE_PULSO] Motor %d (GPIO %d) -> Nivel LOW finalizado (%lu ms).\n",
+            Serial.printf("[HARDWARE_PULSO] Motor %d (GPIO %d) -> Nivel LOW "
+                          "finalizado (%lu ms).\n",
                           i + 1, pinosMotores[i], DURACAO_PULSO_MS);
         }
     }
+}
+
+/**
+ * isPulsoMotorAtivo()
+ * ----------------------------------------------------------------------------
+ * Consulta publica que informa se o canal possui um pulso de 500 ms em curso.
+ * Utilizada pelos modulos de intertravamento (pressostato e manutencao) para
+ * evitar empilhamento de comandos sobre um pulso ativo.
+ *
+ * @param motorIdx Indice do motor alvo (0 a NUM_MOTORES - 1).
+ * @return true se houver pulso HIGH em andamento no canal; false caso contrario.
+ */
+bool isPulsoMotorAtivo(int motorIdx)
+{
+    if (motorIdx < 0 || motorIdx >= NUM_MOTORES)
+    {
+        return false;
+    }
+    return pulsoAtivo[motorIdx];
+}
+/**
+ * getPulsosEmitidos()
+ * ----------------------------------------------------------------------------
+ * Consulta publica do contador de pulsos efetivamente emitidos por canal.
+ * Util para dashboards de manutencao preditiva e relatorios de desgaste.
+ */
+unsigned long getPulsosEmitidos(int motorIdx)
+{
+    if (motorIdx < 0 || motorIdx >= NUM_MOTORES)
+        return 0UL;
+    return pulsosEmitidos[motorIdx];
+}
+
+/**
+ * getPulsosRejeitados()
+ * ----------------------------------------------------------------------------
+ * Consulta publica do contador de pulsos rejeitados pela guarda de re-disparo.
+ * Valores crescentes indicam tentativas de acionamento sobreposto.
+ */
+unsigned long getPulsosRejeitados(int motorIdx)
+{
+    if (motorIdx < 0 || motorIdx >= NUM_MOTORES)
+        return 0UL;
+    return pulsosRejeitados[motorIdx];
 }
 
 // ============================================================================
@@ -307,7 +457,7 @@ void processarPulsosMotores()
  * initSPIFFS()
  * ----------------------------------------------------------------------------
  * Inicializa a montagem do sistema de arquivos na particao Flash SPIFFS.
- * Emprega o sinalizador true para autorizar formatação automatica caso o
+ * Emprega o sinalizador true para autorizar formatacao automatica caso o
  * sistema de arquivos se encontre ausente ou corrompido em nova montagem.
  */
 static void initSPIFFS()
@@ -349,7 +499,9 @@ bool readMotorState(const String &arquivoEstado)
     file.close();
     state.trim();
 
-    return (state == "1" || state.equalsIgnoreCase("true") || state.equalsIgnoreCase("ON"));
+    return (state == "1" ||
+            state.equalsIgnoreCase("true") ||
+            state.equalsIgnoreCase("ON"));
 }
 
 /**
@@ -398,7 +550,8 @@ void saveMotorState(const String &arquivoEstado, bool state)
     }
 
     Serial.printf("[SPIFFS] Estado persistido em %s: %s\n",
-                  arquivoEstado.c_str(), state ? "Ligado (1)" : "Desligado (0)");
+                  arquivoEstado.c_str(),
+                  state ? "Ligado (1)" : "Desligado (0)");
 }
 
 /**
@@ -443,6 +596,10 @@ void saveStatusState(int pin, bool state)
     file.close();
 
     cacheEstadoStatus[idx] = (state ? 1 : 0);
+
+    Serial.printf("[SPIFFS] Feedback persistido em %s: %s\n",
+                  arquivosStatus[idx].c_str(),
+                  state ? "ON" : "OFF");
 }
 
 /**
@@ -471,7 +628,12 @@ unsigned long readTimerState(const String &arquivoTimer)
     file.close();
     remainingTime.trim();
 
-    return (unsigned long)remainingTime.toInt();
+    if (remainingTime.length() == 0)
+    {
+        return 0UL;
+    }
+
+    return strtoul(remainingTime.c_str(), nullptr, 10);
 }
 
 /**
@@ -629,50 +791,160 @@ bool isBeforeOpeningTime()
  */
 bool sistemaDeveEstarBloqueado()
 {
-    return sistemaEmManutencao || isAfterClosingTime() || isBeforeOpeningTime();
+    return sistemaEmManutencao ||
+           isAfterClosingTime() ||
+           isBeforeOpeningTime();
+}
+
+/**
+ * iniciarTimerMotorMs()
+ * ----------------------------------------------------------------------------
+ * Arma o temporizador anti-curto-ciclo do canal em memoria RAM e grava o
+ * saldo inicial na particao SPIFFS. Funciona integralmente no ESP32 mesmo
+ * sem nenhuma pagina web aberta no navegador.
+ *
+ * @param motorIdx  Indice do motor (0 a NUM_MOTORES - 1).
+ * @param duracaoMs Duracao total da janela de protecao em milissegundos.
+ */
+static void iniciarTimerMotorMs(int motorIdx, unsigned long duracaoMs)
+{
+    if (motorIdx < 0 || motorIdx >= NUM_MOTORES || duracaoMs == 0UL)
+    {
+        return;
+    }
+
+    unsigned long agora = millis();
+    timerInicioMs[motorIdx] = agora;
+    timerDuracaoMs[motorIdx] = duracaoMs;
+    motorTimers[motorIdx] = agora + duracaoMs;
+    timersAtivos[motorIdx] = true;
+
+    saveTimerState(arquivosTimers[motorIdx], duracaoMs);
+
+    Serial.printf("[TIMER] Motor %d: temporizador armado por %lu segundos.\n",
+                  motorIdx + 1, duracaoMs / 1000UL);
+}
+
+/**
+ * iniciarTimerMotorSegundos()
+ * ----------------------------------------------------------------------------
+ * Interface publica para armar o temporizador de um canal em segundos,
+ * utilizada por modulos externos (manutencao, pressostato, etc.).
+ *
+ * @param motorIdx        Indice do motor (0 a NUM_MOTORES - 1).
+ * @param duracaoSegundos Duracao total da janela de protecao em segundos.
+ */
+void iniciarTimerMotorSegundos(int motorIdx, unsigned long duracaoSegundos)
+{
+    iniciarTimerMotorMs(motorIdx, duracaoSegundos * 1000UL);
 }
 
 /**
  * desligarTodosMotores()
  * ----------------------------------------------------------------------------
  * Comando global de corte de carga que forca a desativacao de todos os motores
- * da planta, disparando pulsos de abertura e persistindo estado desligado.
+ * da planta, disparando pulsos de abertura APENAS nos canais efetivamente
+ * energizados.
+ *
+ * CORRECAO CRITICA v2.3.0:
+ *   A versao anterior desta rotina emitia um pulso de 500 ms em TODOS os canais
+ *   a cada chamada, independentemente do estado. Como atualizarEstadoMotores()
+ *   eh chamada a cada 5 segundos pelo loop principal, e como reles de impulso
+ *   alternam estado a cada pulso, o sistema podia ficar oscilando ON/OFF
+ *   continuamente durante todo o periodo de bloqueio (tipicamente a madrugada
+ *   inteira). A condicional abaixo elimina esse defeito e preserva a idempotencia
+ *   da operacao.
+ *
+ * CRITERIO DE PULSO:
+ *   Pulsamos o canal se a intencao logica (motoresLigados) OU o feedback fisico
+ *   (digitalRead do pino de status) indicar que o motor esta ativo. Quando o
+ *   desligamento ocorre fora do modo manutencao (ex: fim do expediente ou
+ *   emergencia), tambem arma o timer de descanso DESLIGAR_TIMEOUT (10 min).
  */
 void desligarTodosMotores()
 {
+    int canaisDesligados = 0;
+
     for (int i = 0; i < NUM_MOTORES; i++)
     {
-        dispararPulsoMotor(i);
+        bool feedbackFisico = (digitalRead(pinosStatus[i]) == HIGH);
+
+        // Verifica se ha evidencia (logica ou fisica) de motor ativo
+        bool precisaDesligar = motoresLigados[i] || feedbackFisico;
+
+        if (!precisaDesligar)
+        {
+            // Canal ja esta desligado: nada a fazer, preserva reles
+            continue;
+        }
+
+        // So consolida estado desligado e mede na IA se o pulso foi aceito
+        if (!dispararPulsoMotor(i))
+        {
+            continue;
+        }
+
+        iaLocal.iniciarMedicaoComando(i, false);
         motoresLigados[i] = false;
         saveMotorState(arquivosMotores[i], false);
+        canaisDesligados++;
+
+        // Arma descanso obrigatorio pos-parada se nao for transicao de manutencao
+        if (!sistemaEmManutencao)
+        {
+            iniciarTimerMotorMs(i, DESLIGAR_TIMEOUT * 1000UL);
+        }
+
+        Serial.printf("[SISTEMA_MOTORES] Motor %d desligado "
+                      "(intencao_previa=1, feedback_fisico=%d).\n",
+                      i + 1, (int)feedbackFisico);
     }
-    Serial.println("[SISTEMA_MOTORES] Todos os motores foram desligados com sucesso.");
+
+    if (canaisDesligados == 0)
+    {
+        Serial.println("[SISTEMA_MOTORES] Varredura de desligamento: "
+                       "nenhum motor ativo, pulsos suprimidos.");
+    }
+    else
+    {
+        Serial.printf("[SISTEMA_MOTORES] Desligamento aplicado em %d canal(is).\n",
+                      canaisDesligados);
+    }
 }
 
 /**
  * desativarSistemaForaDoHorario()
  * ----------------------------------------------------------------------------
  * Rotina executada periodicamente para encerrar operacoes ativas de compressores
- * assim que o horario de expediente atingir o limite estipulado em fábrica.
+ * assim que o horario de expediente atingir o limite estipulado em fabrica.
  */
 void desativarSistemaForaDoHorario()
 {
     if (isAfterClosingTime() || isBeforeOpeningTime())
     {
         desligarTodosMotores();
-        Serial.println("[HORARIO] Sistema desativado: Fora do horario permitido (08:00 as 22:00).");
+        Serial.println("[HORARIO] Sistema desativado: Fora do horario "
+                       "permitido (08:00 as 22:00).");
     }
 }
 
 /**
  * atualizarEstadoMotores()
  * ----------------------------------------------------------------------------
- * Ponto de entrada de auditoria ciclica invocado pelo escalonador do loop():
- * Garante que nenhum motor permaneca energizado caso ocorra ativacao da chave
- * de manutencao ou violacao de horario operacional.
+ * Ponto de entrada de auditoria ciclica invocado pelo escalonador do loop()
+ * a cada 5 segundos, independentemente de haver navegador conectado:
+ *   1. Atualiza a expiracao dos temporizadores em RAM/SPIFFS em segundo plano;
+ *   2. Garante que nenhum motor permaneca energizado caso ocorra ativacao da
+ *      chave de manutencao ou violacao de horario operacional.
  */
 void atualizarEstadoMotores()
 {
+    // Garante que qualquer timer expirado seja concluido mesmo fora da pagina
+    for (int i = 0; i < NUM_MOTORES; i++)
+    {
+        isMotorTimerActive(i);
+    }
+
     if (sistemaDeveEstarBloqueado())
     {
         desligarTodosMotores();
@@ -686,9 +958,10 @@ void atualizarEstadoMotores()
 /**
  * isMotorTimerActive()
  * ----------------------------------------------------------------------------
- * Checa a vigencia da contagem regressiva de seguranca do motor. Caso o tempo
- * estipulado tenha transcorrido por completo, a flag de descanso eh baixada e
- * o saldo eh redefinido para zero na particao de persistencia Flash.
+ * Checa a vigencia da contagem regressiva de seguranca do motor utilizando
+ * aritmetica diferencial segura contra overflow (rollover) de millis().
+ * Caso o tempo estipulado tenha transcorrido por completo, a flag de descanso
+ * eh baixada e o saldo eh redefinido para zero na particao de persistencia Flash.
  *
  * @param motorIdx Indice do motor analisado.
  * @return true se o temporizador estiver em contagem regressiva ativa.
@@ -700,19 +973,28 @@ bool isMotorTimerActive(int motorIdx)
         return false;
     }
 
-    // Caso o relogio de millis() ainda nao tenha alcancado a meta estipulada
-    if (millis() < motorTimers[motorIdx])
+    if (!timersAtivos[motorIdx] || timerDuracaoMs[motorIdx] == 0UL)
+    {
+        return false;
+    }
+
+    // Subtracao unsigned long eh matematicamente segura mesmo no rollover de 49,7 dias
+    unsigned long decorrido = millis() - timerInicioMs[motorIdx];
+    if (decorrido < timerDuracaoMs[motorIdx])
     {
         return true;
     }
 
     // Caso o timer tenha expirado, normaliza o canal para novas ordens
-    if (motorTimers[motorIdx] != 0UL && millis() >= motorTimers[motorIdx])
-    {
-        motorTimers[motorIdx] = 0UL;
-        timersAtivos[motorIdx] = false;
-        saveTimerState(arquivosTimers[motorIdx], 0UL);
-    }
+    timersAtivos[motorIdx] = false;
+    timerInicioMs[motorIdx] = 0UL;
+    timerDuracaoMs[motorIdx] = 0UL;
+    motorTimers[motorIdx] = 0UL;
+    saveTimerState(arquivosTimers[motorIdx], 0UL);
+
+    Serial.printf("[TIMER] Motor %d: janela de descanso expirada, "
+                  "canal liberado.\n",
+                  motorIdx + 1);
 
     return false;
 }
@@ -732,7 +1014,15 @@ unsigned long getMotorRemainingTime(int motorIdx)
     {
         return 0UL;
     }
-    return (motorTimers[motorIdx] - millis()) / 1000UL;
+
+    unsigned long decorrido = millis() - timerInicioMs[motorIdx];
+    if (decorrido >= timerDuracaoMs[motorIdx])
+    {
+        return 0UL;
+    }
+
+    unsigned long restanteMs = timerDuracaoMs[motorIdx] - decorrido;
+    return restanteMs / 1000UL;
 }
 
 /**
@@ -741,6 +1031,7 @@ unsigned long getMotorRemainingTime(int motorIdx)
  * Rotina executada periodicamente no laco principal (a cada 60 segundos) para
  * atualizar o saldo dos temporizadores em memoria e assegurar a gravacao de
  * contingencia na memoria Flash para restauracao confiavel pos-queda de rede.
+ * Funciona de maneira autonoma no ESP32 mesmo sem nenhuma pagina aberta.
  */
 void updateTimers()
 {
@@ -748,17 +1039,26 @@ void updateTimers()
 
     for (int i = 0; i < NUM_MOTORES; i++)
     {
-        if (motorTimers[i] > agora)
+        if (!timersAtivos[i])
         {
-            unsigned long tempoRestante = motorTimers[i] - agora;
-            saveTimerState(arquivosTimers[i], tempoRestante);
-            timersAtivos[i] = true;
+            continue;
         }
-        else if (timersAtivos[i])
+
+        unsigned long decorrido = agora - timerInicioMs[i];
+        if (decorrido < timerDuracaoMs[i])
         {
-            saveTimerState(arquivosTimers[i], 0UL);
+            unsigned long tempoRestante = timerDuracaoMs[i] - decorrido;
+            saveTimerState(arquivosTimers[i], tempoRestante);
+        }
+        else
+        {
             timersAtivos[i] = false;
+            timerInicioMs[i] = 0UL;
+            timerDuracaoMs[i] = 0UL;
             motorTimers[i] = 0UL;
+            saveTimerState(arquivosTimers[i], 0UL);
+
+            Serial.printf("[TIMER] Motor %d: descanso concluido.\n", i + 1);
         }
     }
 }
@@ -771,7 +1071,7 @@ void updateTimers()
  * monitorarStatusCompressores()
  * ----------------------------------------------------------------------------
  * Realiza a leitura e filtragem com debounce das entradas auxiliares dos
- * contatores mecânicos para fins de diagnostico industrial e telemetria.
+ * contatores mecanicos para fins de diagnostico industrial e telemetria.
  *
  * NOTA ARQUITETURAL DE CORRECAO CRITICA:
  *   Nesta versao, o nivel eletrico observado na entrada NAO forca o encerramento
@@ -841,6 +1141,38 @@ void updateMotorStatus()
     }
 }
 
+/**
+ * getTotalSegundosOperacao()
+ * ----------------------------------------------------------------------------
+ * Consulta publica do horimetro acumulado em segundos para o canal indicado.
+ * O valor retornado inclui o segmento em curso (se o motor estiver ligado).
+ */
+unsigned long getTotalSegundosOperacao(int motorIdx)
+{
+    if (motorIdx < 0 || motorIdx >= NUM_MOTORES)
+        return 0UL;
+
+    unsigned long total = totalSegundosOperacao[motorIdx];
+    if (tempoInicioOperacao[motorIdx] > 0UL)
+    {
+        total += (millis() - tempoInicioOperacao[motorIdx]) / 1000UL;
+    }
+    return total;
+}
+
+/**
+ * getCiclosAcionamento()
+ * ----------------------------------------------------------------------------
+ * Consulta publica do numero total de manobras de acionamento do canal.
+ * Util para manutencao preditiva de contatores (vida util tipica em ciclos).
+ */
+unsigned long getCiclosAcionamento(int motorIdx)
+{
+    if (motorIdx < 0 || motorIdx >= NUM_MOTORES)
+        return 0UL;
+    return ciclosAcionamento[motorIdx];
+}
+
 // ============================================================================
 // SECAO 11: CONTROLADOR HTTP REST ASSINCRONO DE ACIONAMENTO (/toggle)
 // ============================================================================
@@ -848,10 +1180,11 @@ void updateMotorStatus()
 /**
  * handleToggleAction()
  * ----------------------------------------------------------------------------
- * Registra o despachante de requisicoes HTTP responsavel por processar ordens
- * remotas autenticadas de comutacao (LIGAR e DESLIGAR) enviadas pelo painel.
+ * Registra o despachante de requisicoes HTTP POST responsavel por processar
+ * ordens remotas autenticadas de comutacao (LIGAR e DESLIGAR) enviadas pelo
+ * painel. Restrito a HTTP_POST para protecao anti-CSRF.
  *
- * @param server Instancia de referencia do servidor web assincrono ESPAsyncWebServer.
+ * @param server Instancia de referencia do servidor web assincrono.
  */
 void handleToggleAction(AsyncWebServer &server)
 {
@@ -861,16 +1194,20 @@ void handleToggleAction(AsyncWebServer &server)
     }
     toggleRouteConfigurada = true;
 
-    server.on("/toggle", HTTP_ANY, [](AsyncWebServerRequest *request)
+    server.on("/toggle", HTTP_POST, [](AsyncWebServerRequest *request)
               {
+        // ================================================================
         // 1. Validacao de seguranca de credencial autenticada via sessao
+        // ================================================================
         if (!isAuthenticated(request))
         {
-            redirectToAccessDenied(request);
+            request->send(401, "text/plain", "Nao autorizado.");
             return;
         }
 
-        // 2. Avaliacao de bloqueio geral (manutencao fisica ou fora de expediente)
+        // ================================================================
+        // 2. Avaliacao de bloqueio geral (manutencao fisica ou fora de horario)
+        // ================================================================
         if (sistemaDeveEstarBloqueado())
         {
             request->send(200, "text/plain",
@@ -878,25 +1215,43 @@ void handleToggleAction(AsyncWebServer &server)
             return;
         }
 
-        // 3. Confirmacao de argumentos mandatorios no envelope HTTP
-        if (!request->hasParam("motor") || !request->hasParam("action"))
+        // ================================================================
+        // 3. Confirmacao de argumentos mandatorios (corpo POST ou query POST)
+        // ================================================================
+        String motorStr = "";
+        String action = "";
+
+        if (request->hasParam("motor", true) && request->hasParam("action", true))
+        {
+            motorStr = request->getParam("motor", true)->value();
+            action = request->getParam("action", true)->value();
+        }
+        else if (request->hasParam("motor") && request->hasParam("action"))
+        {
+            motorStr = request->getParam("motor")->value();
+            action = request->getParam("action")->value();
+        }
+        else
         {
             request->send(400, "text/plain", "Parametros de requisicao ausentes.");
             return;
         }
 
-        int motorIdx = request->getParam("motor")->value().toInt() - 1;
-        String action = request->getParam("action")->value();
+        int motorIdx = motorStr.toInt() - 1;
         action.toLowerCase();
 
+        // ================================================================
         // 4. Verificacao de integridade de indice de canal
+        // ================================================================
         if (motorIdx < 0 || motorIdx >= NUM_MOTORES)
         {
             request->send(400, "text/plain", "Identificador de motor invalido.");
             return;
         }
 
+        // ================================================================
         // 5. Intertravamento por sobrecarga termica bimetalica
+        // ================================================================
         if (sobrecargaDetectada[motorIdx])
         {
             request->send(200, "text/plain",
@@ -904,7 +1259,9 @@ void handleToggleAction(AsyncWebServer &server)
             return;
         }
 
+        // ================================================================
         // 6. Intertravamento do compressor por pressostato de seguranca
+        // ================================================================
         if (motorIdx == 0 && pressostatoAtivo)
         {
             request->send(200, "text/plain",
@@ -912,7 +1269,9 @@ void handleToggleAction(AsyncWebServer &server)
             return;
         }
 
+        // ================================================================
         // 7. Intertravamento por descanso anti-curto-ciclo ativo
+        // ================================================================
         if (isMotorTimerActive(motorIdx))
         {
             request->send(200, "text/plain",
@@ -923,24 +1282,29 @@ void handleToggleAction(AsyncWebServer &server)
         // Registra o instante do comando manual para rastreabilidade
         comandoManualTimestamp[motorIdx] = millis();
 
-        // ====================================================================
+        // ================================================================
         // RAMO OPERACIONAL: ORDEM DE LIGAR
-        // ====================================================================
+        // ================================================================
+
         if (action == "ligar")
         {
-            // Emite o pulso de comando de hardware de 500 ms
-            dispararPulsoMotor(motorIdx);
+            // Emite o pulso de comando de hardware (500 ms)
+            if (!dispararPulsoMotor(motorIdx))
+            {
+                request->send(200, "text/plain",
+                              "Aguarde: pulso anterior ainda em execucao.");
+                return;
+            }
 
-            // Grava a intencao logica soberana em RAM
+            // Pulso aceito: inicia medicao de latencia/ciclo na IA local
+            iaLocal.iniciarMedicaoComando(motorIdx, true);
+
+            // Grava a intencao logica soberana em RAM e persiste estado
             motoresLigados[motorIdx] = true;
-
-            // Arma o temporizador de descanso anti-curto-ciclo pos-partida
-            motorTimers[motorIdx] = millis() + (LIGAR_TIMEOUT * 1000UL);
-            timersAtivos[motorIdx] = true;
-
-            // Persiste o timer e o novo estado operacional na Flash com cache
-            saveTimerState(arquivosTimers[motorIdx], LIGAR_TIMEOUT * 1000UL);
             saveMotorState(arquivosMotores[motorIdx], true);
+
+            // Arma o temporizador anti-curto-ciclo pos-partida (60 min no ESP32)
+            iniciarTimerMotorMs(motorIdx, LIGAR_TIMEOUT * 1000UL);
 
             Serial.printf("[WEB] Motor %d: Comando LIGAR aceito. Estado: LIGADO soberano.\n",
                           motorIdx + 1);
@@ -948,24 +1312,28 @@ void handleToggleAction(AsyncWebServer &server)
             request->send(200, "text/plain",
                           "Motor " + String(motorIdx + 1) + " ligado com sucesso!");
         }
-        // ====================================================================
+        // ================================================================
         // RAMO OPERACIONAL: ORDEM DE DESLIGAR
-        // ====================================================================
+        // ================================================================
         else if (action == "desligar")
         {
-            // Emite o pulso de comando de hardware de 500 ms
-            dispararPulsoMotor(motorIdx);
+            // Emite o pulso de comando de hardware (500 ms)
+            if (!dispararPulsoMotor(motorIdx))
+            {
+                request->send(200, "text/plain",
+                              "Aguarde: pulso anterior ainda em execucao.");
+                return;
+            }
 
-            // Grava a intencao logica soberana em RAM
+            // Pulso aceito: encerra ciclo e verifica abertura do contator na IA
+            iaLocal.iniciarMedicaoComando(motorIdx, false);
+
+            // Grava a intencao logica soberana em RAM e persiste estado
             motoresLigados[motorIdx] = false;
-
-            // Arma o temporizador de descanso anti-curto-ciclo pos-parada
-            motorTimers[motorIdx] = millis() + (DESLIGAR_TIMEOUT * 1000UL);
-            timersAtivos[motorIdx] = true;
-
-            // Persiste o timer e o novo estado operacional na Flash com cache
-            saveTimerState(arquivosTimers[motorIdx], DESLIGAR_TIMEOUT * 1000UL);
             saveMotorState(arquivosMotores[motorIdx], false);
+
+            // Arma o temporizador anti-curto-ciclo pos-parada (10 min no ESP32)
+            iniciarTimerMotorMs(motorIdx, DESLIGAR_TIMEOUT * 1000UL);
 
             Serial.printf("[WEB] Motor %d: Comando DESLIGAR aceito. Estado: DESLIGADO.\n",
                           motorIdx + 1);
@@ -973,9 +1341,36 @@ void handleToggleAction(AsyncWebServer &server)
             request->send(200, "text/plain",
                           "Motor " + String(motorIdx + 1) + " desligado com sucesso!");
         }
-        // ====================================================================
+        // ================================================================
+        // RAMO OPERACIONAL: ORDEM DE DESLIGAR
+        // ================================================================
+        else if (action == "desligar")
+        {
+            // Emite o pulso de comando de hardware (500 ms)
+            if (!dispararPulsoMotor(motorIdx))
+            {
+                iaLocal.iniciarMedicaoComando(motorIdx, false);
+                request->send(200, "text/plain",
+                              "Aguarde: pulso anterior ainda em execucao.");
+                return;
+            }
+
+            // Grava a intencao logica soberana em RAM e persiste estado
+            motoresLigados[motorIdx] = false;
+            saveMotorState(arquivosMotores[motorIdx], false);
+
+            // Arma o temporizador anti-curto-ciclo pos-parada (10 min no ESP32)
+            iniciarTimerMotorMs(motorIdx, DESLIGAR_TIMEOUT * 1000UL);
+
+            Serial.printf("[WEB] Motor %d: Comando DESLIGAR aceito. Estado: DESLIGADO.\n",
+                          motorIdx + 1);
+
+            request->send(200, "text/plain",
+                          "Motor " + String(motorIdx + 1) + " desligado com sucesso!");
+        }
+        // ================================================================
         // RAMO EXCEPCIONAL: COMANDO NAO RECONHECIDO
-        // ====================================================================
+        // ================================================================
         else
         {
             request->send(400, "text/plain", "Acao de comando solicitada e invalida.");
@@ -983,7 +1378,62 @@ void handleToggleAction(AsyncWebServer &server)
 }
 
 // ============================================================================
-// SECAO 12: INICIALIZACAO GERAL DO SUBSISTEMA LIGA/DESLIGA NO SETUP
+// SECAO 12: ROTINAS AUXILIARES DE DIAGNOSTICO E TELEMETRIA
+// ============================================================================
+
+/**
+ * dumpEstadoMotores()
+ * ----------------------------------------------------------------------------
+ * Emite no console serial um relatorio completo do estado atual dos canais,
+ * incluindo intencao logica, feedback fisico, saldo de timer e contadores
+ * de auditoria. Util para verificacao em bancada e diagnostico em campo.
+ */
+void dumpEstadoMotores()
+{
+    Serial.println("==============================================");
+    Serial.println("[DIAGNOSTICO] Estado atual dos canais");
+    Serial.println("==============================================");
+
+    for (int i = 0; i < NUM_MOTORES; i++)
+    {
+        unsigned long restante = getMotorRemainingTime(i);
+        bool feedbackFisico = (digitalRead(pinosStatus[i]) == HIGH);
+
+        Serial.printf("Motor %d (GPIO %d | FB GPIO %d)\n",
+                      i + 1, pinosMotores[i], pinosStatus[i]);
+        Serial.printf("  Intencao logica : %s\n",
+                      motoresLigados[i] ? "LIGADO" : "DESLIGADO");
+        Serial.printf("  Feedback fisico : %s\n",
+                      feedbackFisico ? "ON" : "OFF");
+        Serial.printf("  Timer descanso  : %lu s\n", restante);
+        Serial.printf("  Pulsos emitidos : %lu\n", pulsosEmitidos[i]);
+        Serial.printf("  Pulsos rejeit.  : %lu\n", pulsosRejeitados[i]);
+        Serial.printf("  Ciclos manobra  : %lu\n", ciclosAcionamento[i]);
+        Serial.printf("  Horimetro       : %lu s\n", getTotalSegundosOperacao(i));
+        Serial.println("----------------------------------------------");
+    }
+}
+
+/**
+ * resetarContadoresAuditoria()
+ * ----------------------------------------------------------------------------
+ * Zera os contadores volateis de auditoria (pulsos emitidos/rejeitados).
+ * Util apos manutencao preventiva para reiniciar metricas de desgaste.
+ * NAO afeta os horimetros acumulados nem os temporizadores em curso.
+ */
+void resetarContadoresAuditoria()
+{
+    for (int i = 0; i < NUM_MOTORES; i++)
+    {
+        pulsosEmitidos[i] = 0UL;
+        pulsosRejeitados[i] = 0UL;
+        ciclosAcionamento[i] = 0UL;
+    }
+    Serial.println("[AUDITORIA] Contadores de pulsos e ciclos zerados.");
+}
+
+// ============================================================================
+// SECAO 13: INICIALIZACAO GERAL DO SUBSISTEMA LIGA/DESLIGA NO SETUP
 // ============================================================================
 
 /**
@@ -1003,10 +1453,14 @@ void setupLigaDesliga(AsyncWebServer &server)
 {
     Serial.println("[SETUP] Configurando sistema de acionamento Liga/Desliga...");
 
+    // ----------------------------------------------------------------------
     // 1. Inicializacao do sistema de arquivos de persistencia
+    // ----------------------------------------------------------------------
     initSPIFFS();
 
+    // ----------------------------------------------------------------------
     // 2. Configuracao eletrica de hardware dos GPIOs de potencia e feedback
+    // ----------------------------------------------------------------------
     for (int i = 0; i < NUM_MOTORES; i++)
     {
         pinMode(pinosMotores[i], OUTPUT);
@@ -1017,30 +1471,46 @@ void setupLigaDesliga(AsyncWebServer &server)
         // Restaura em RAM o estado gravado antes da interrupcao de energia
         motoresLigados[i] = readMotorState(arquivosMotores[i]);
 
-        Serial.printf("[SETUP] Motor %d restaurado no boot como: %s (Pino Saida GPIO %d)\n",
-                      i + 1, motoresLigados[i] ? "LIGADO" : "DESLIGADO", pinosMotores[i]);
+        Serial.printf("[SETUP] Motor %d restaurado no boot como: %s "
+                      "(Pino Saida GPIO %d)\n",
+                      i + 1,
+                      motoresLigados[i] ? "LIGADO" : "DESLIGADO",
+                      pinosMotores[i]);
     }
 
+    // ----------------------------------------------------------------------
     // 3. Restauracao de saldos remanescentes dos temporizadores de protecao
+    // ----------------------------------------------------------------------
     for (int i = 0; i < NUM_MOTORES; i++)
     {
         unsigned long tempoRestante = readTimerState(arquivosTimers[i]);
         if (tempoRestante > 0UL)
         {
-            motorTimers[i] = millis() + tempoRestante;
-            timersAtivos[i] = true;
+            iniciarTimerMotorMs(i, tempoRestante);
             Serial.printf("[TIMER] Motor %d restaurou descanso de %lu ms restantes.\n",
                           i + 1, tempoRestante);
         }
     }
 
+    // ----------------------------------------------------------------------
     // 4. Registro da rota HTTP REST assincrona para despachos de acionamento
+    // ----------------------------------------------------------------------
     handleToggleAction(server);
 
+    // ----------------------------------------------------------------------
     // 5. Inicializacao do cliente de sincronizacao de relogio NTP
+    // ----------------------------------------------------------------------
     setupTimeClient();
 
+    // ----------------------------------------------------------------------
     // 6. Aplicacao imediata de travas e regras de horario
+    //
+    // NOTA CRITICA v2.3.0: com a correcao aplicada em desligarTodosMotores(),
+    // esta chamada NAO emite pulsos espurios no boot quando o sistema inicia
+    // fora do horario ou em manutencao. Antes da correcao, cada reinicializacao
+    // do ESP32 gerava um pulso de 500 ms em todos os tres canais, o que podia
+    // acionar inadvertidamente contatores em campo.
+    // ----------------------------------------------------------------------
     atualizarEstadoMotores();
 
     Serial.println("[SETUP] Modulo Liga/Desliga inicializado com sucesso.");

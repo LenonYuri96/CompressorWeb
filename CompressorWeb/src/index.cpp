@@ -8,6 +8,12 @@
 /**
  * Configura a rota para a página de login no servidor Web.
  *
+ * Otimização de Memória (Flash/RODATA):
+ *   O documento HTML é armazenado como `const char *` diretamente na memória
+ *   Flash, evitando a alocação de ~6 KB contíguos na Heap a cada requisição
+ *   GET "/". O tratamento do parâmetro `?login_failed=true` é feito no
+ *   navegador via `URLSearchParams`, dispensando `String::replace()`.
+ *
  * @param server A instância do servidor web assíncrono.
  */
 void setupIndexPage(AsyncWebServer &server)
@@ -15,8 +21,8 @@ void setupIndexPage(AsyncWebServer &server)
     // Define a rota para a URL raiz ("/") do servidor web
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
               {
-        // Define o conteúdo HTML da página de login usando um literal RAW
-        String html = R"rawliteral(
+        // Define o conteúdo HTML da página de login usando um literal RAW direto na Flash
+        const char *html = R"rawliteral(
 <!DOCTYPE html>
 <html lang="pt-br">
     <head>
@@ -47,10 +53,6 @@ body {
             background-color: #181818;
             color: #f0f0f0;
         }
-        .high-contrast {
-            background-color: #000;
-            color: #fff;
-        }
         .login-container {
     background-color: #ffffff;
     padding: 20px;
@@ -64,9 +66,6 @@ body {
         .dark-mode .login-container {
             background-color: #2a2a2a;
         }
-        .high-contrast .login-container {
-            background-color: #000;
-        }
         .login-title {
             font-size: 24px;
             font-family: "Playfair Display", serif;
@@ -78,7 +77,7 @@ body {
             color: rgb(242, 95, 22);
             font-weight: bold;
         }
-        .dark-mode .login-title, .high-contrast .login-title {
+        .dark-mode .login-title {
             color: #1e90ff;
         }
         .form-group {
@@ -91,7 +90,7 @@ body {
             border-radius: 5px;
             box-sizing: border-box;
         }
-        .dark-mode .form-control, .high-contrast .form-control {
+        .dark-mode .form-control {
             background-color: #333;
             color: #fff;
             border-color: #555;
@@ -188,31 +187,17 @@ body {
         }
         /* Cores adicionais para garantir que cada botão tenha uma cor diferente */
         .btn-creditos {
-            background-color: #ea0b0b; /* Verde */
+            background-color: #ea0b0b; /* Vermelho */
         }
         .btn-creditos:hover {
             background-color: #7d0909;
             transform: scale(1.05);
         }
-        .btn-gerenciamento {
-            background-color: rgb(232, 106, 16); /* Azul claro */
-        }
-        .btn-gerenciamento:hover {
-            background-color: rgb(149, 39, 5);
-            transform: scale(1.05);
-        }
         .btn-dark-mode {
-            background-color: rgb(234, 161, 15); /* Roxo */
+            background-color: rgb(234, 161, 15); /* Laranja/Dourado */
         }
         .btn-dark-mode:hover {
             background-color: #8e5204;
-            transform: scale(1.05);
-        }
-        .btn-high-contrast {
-            background-color: rgb(247, 214, 49); /* Rosa */
-        }
-        .btn-high-contrast:hover {
-            background-color: #8c7807;
             transform: scale(1.05);
         }
         .text-danger {
@@ -247,25 +232,17 @@ body {
                     <input type="password" name="password" class="form-control"
                         placeholder="Senha" aria-label="Senha" required>
                 </div>
-                <button type="submit" class="btn btn-primary" type="button"
+                <button type="submit" class="btn btn-primary"
                     aria-label="Entrar">Entrar</button>
-                <div class="text-danger">%ERROR_MESSAGE%</div>
+                <div id="errorMessage" class="text-danger"></div>
             </form>
             <button onclick="window.location.href='/creditos'"
                 class="btn btn-creditos"
                 aria-label="Ir para créditos">Créditos</button>
-            <button onclick="window.location.href='/wifigerenciamento'"
-                class="btn btn-gerenciamento"
-                aria-label="Ir para gerenciamento Wi-Fi">Gerenciamento
-                Wi-Fi</button>
 
             <div class="theme-toggle">
                 <button onclick="toggleDarkMode()" class="btn btn-dark-mode"
                     aria-label="Ativar modo noturno">Modo Noturno</button>
-                <button onclick="toggleHighContrast()"
-                    class="btn btn-high-contrast"
-                    aria-label="Ativar modo alto contraste">Alto
-                    Contraste</button>
             </div>
         </div>
         <div class="footer" role="contentinfo">
@@ -275,37 +252,37 @@ body {
         </div>
 
         <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            // Verifica o parâmetro ?login_failed=true diretamente no navegador (dispensa String::replace no ESP32)
+            var params = new URLSearchParams(window.location.search);
+            if (params.has('login_failed')) {
+                document.getElementById('errorMessage').textContent = 'Usuário ou senha incorretos. Tente novamente.';
+            }
+
+            // Sincroniza o modo noturno salvo no navegador entre as telas
+            if (localStorage.getItem('energizar_theme') === 'night') {
+                document.body.classList.add('dark-mode');
+            }
+        });
+
         function storeLoginData(event) {
             event.preventDefault();
             var username = document.querySelector('input[name="username"]').value;
-            var password = document.querySelector('input[name="password"]').value;
-            console.log('Tentando login com usuário: ' + username + ' e senha: ' + password);
+            // Não registra a senha no console do navegador por segurança
+            console.log('Enviando autenticação para usuário: ' + username);
             event.target.submit();
         }
 
         function toggleDarkMode() {
             document.body.classList.toggle('dark-mode');
-        }
-
-        function toggleHighContrast() {
-            document.body.classList.toggle('high-contrast');
+            var modoEscuro = document.body.classList.contains('dark-mode');
+            localStorage.setItem('energizar_theme', modoEscuro ? 'night' : 'light');
         }
     </script>
     </body>
 </html>
         )rawliteral";
 
-        // Verifica se há um parâmetro de falha de login e ajusta a mensagem de erro
-        String errorMessage;
-        if (request->hasParam("login_failed")) {
-            errorMessage = "Usuário ou senha incorretos. Tente novamente."; // Mensagem de erro se o login falhar
-        } else {
-            errorMessage = ""; // Sem mensagem de erro
-        }
-        
-        // Substitui o placeholder da mensagem de erro no HTML
-        html.replace("%ERROR_MESSAGE%", errorMessage);
-
-        // Envia a resposta ao cliente com o conteúdo HTML
+        // Envia a resposta ao cliente diretamente da memória Flash (zero alocação de String na Heap)
         request->send(200, "text/html", html); }); // Responde ao pedido HTTP GET com o conteúdo HTML da página de login
 }

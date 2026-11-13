@@ -44,13 +44,15 @@ extern const String arquivosTimers[NUM_MOTORES];
 // -------------------------------------------------------------------------
 void setupLigaDesliga(AsyncWebServer &server);
 void processarPulsosMotores();         // Desliga pulso de 500ms sem delay()
-void dispararPulsoMotor(int motorIdx); // Inicia pulso de nivel alto na bobina
+bool dispararPulsoMotor(int motorIdx); // Inicia pulso de nivel alto na bobina (com guarda)
+bool isPulsoMotorAtivo(int motorIdx);  // Consulta se ha pulso de 500ms em curso
 void monitorarStatusCompressores();    // Leitura e debounce de retorno eletrico
 void updateMotorStatus();              // Sincroniza estado fisico na memoria
 
 // -------------------------------------------------------------------------
 // 5. Funcoes de Gestao dos Temporizadores e Restituicao de Saldo
 // -------------------------------------------------------------------------
+void iniciarTimerMotorSegundos(int motorIdx, unsigned long duracaoSegundos);
 void updateTimers();                               // Atualiza saldos em memoria e flash
 bool isMotorTimerActive(int motorIdx);             // Valida se motor esta bloqueado
 unsigned long getMotorRemainingTime(int motorIdx); // Retorna segundos restantes
@@ -59,7 +61,7 @@ void handleToggleAction(AsyncWebServer &server);   // Registra rota HTTP /toggle
 // -------------------------------------------------------------------------
 // 6. Funcoes de Intertravamento e Seguranca Industrial
 // -------------------------------------------------------------------------
-void desligarTodosMotores();          // Corte geral instantaneo de cargas
+void desligarTodosMotores();          // Corte geral condicional de cargas
 void atualizarEstadoMotores();        // Auditoria de regras e paradas gerais
 void desativarSistemaForaDoHorario(); // Bloqueio automatico fora de expediente
 bool sistemaDeveEstarBloqueado();     // Valida chave manutencao e horario
@@ -81,10 +83,19 @@ unsigned long readTimerState(const String &arquivoTimer);
 void saveTimerState(const String &arquivoTimer, unsigned long remainingTime);
 
 // -------------------------------------------------------------------------
-// 9. Aliases Globais de Compatibilidade
+// 9. Telemetria, Horimetro e Auditoria de Pulsos
+// -------------------------------------------------------------------------
+unsigned long getPulsosEmitidos(int motorIdx);
+unsigned long getPulsosRejeitados(int motorIdx);
+unsigned long getTotalSegundosOperacao(int motorIdx);
+unsigned long getCiclosAcionamento(int motorIdx);
+void dumpEstadoMotores();
+void resetarContadoresAuditoria();
+
+// -------------------------------------------------------------------------
+// 10. Aliases Globais de Compatibilidade
 // -------------------------------------------------------------------------
 extern const int NUM_MOTORS;
 extern const int *motorPins;
 
 #endif // LIGADESLIGA_H
-       // ============================================================================
