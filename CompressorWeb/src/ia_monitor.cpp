@@ -34,8 +34,11 @@ void setupIAMonitorPage(AsyncWebServer &server)
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-            background-color: #f0f2f5;
-            color: #212529;
+            background-color: #d6dde4;
+            background-image: linear-gradient(rgba(30, 39, 46, 0.05) 1px, transparent 1px),
+                              linear-gradient(90deg, rgba(30, 39, 46, 0.05) 1px, transparent 1px);
+            background-size: 20px 20px;
+            color: #1e272e;
             min-height: 100vh;
             display: flex;
             flex-direction: column;
@@ -45,10 +48,12 @@ void setupIAMonitorPage(AsyncWebServer &server)
         }
 
         .container {
-            background-color: #ffffff;
-            padding: 24px;
-            border-radius: 12px;
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+            background-color: #eceff1;
+            padding: 22px 20px;
+            border-radius: 8px;
+            border: 2px solid #90a4ae;
+            border-top: 6px solid #e65100;
+            box-shadow: 0 10px 28px rgba(15, 23, 30, 0.22), inset 0 1px 0 #ffffff;
             text-align: center;
             width: 92%;
             max-width: 460px;
@@ -56,16 +61,31 @@ void setupIAMonitorPage(AsyncWebServer &server)
             transition: background-color 0.3s;
         }
 
-        .title { font-size: 22px; font-weight: 700; margin-bottom: 4px; color: #e65100; }
-        .subtitle { font-size: 13px; color: #666; margin-bottom: 18px; }
+        .title {
+            font-size: 19px;
+            font-weight: 800;
+            margin-bottom: 6px;
+            padding: 10px 12px;
+            background-color: #1e272e;
+            color: #ff9800;
+            border-radius: 5px;
+            border-left: 5px solid #e65100;
+            border-right: 5px solid #e65100;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.4);
+        }
+        .subtitle { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: #546e7a; margin-bottom: 16px; }
 
         .metric-card {
-            background: #fafafa;
-            border: 1px solid #e0e0e0;
-            border-radius: 10px;
+            background: #f7f9fa;
+            border: 1px solid #b0bec5;
+            border-left: 5px solid #0277bd;
+            border-radius: 6px;
             padding: 14px;
             margin-bottom: 12px;
             text-align: left;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.06);
         }
 
         .metric-header {
@@ -76,35 +96,40 @@ void setupIAMonitorPage(AsyncWebServer &server)
             gap: 8px;
         }
 
-        .metric-title { font-size: 14px; font-weight: 700; color: #333; }
+        .metric-title { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #263238; }
 
         .badge {
             display: inline-block;
             padding: 3px 9px;
-            border-radius: 20px;
+            border-radius: 4px;
             font-size: 11px;
-            font-weight: 700;
+            font-weight: 800;
             text-transform: uppercase;
         }
-        .badge-ok   { background: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9; }
-        .badge-cal  { background: #fff3e0; color: #ef6c00; border: 1px solid #ffe0b2; }
-        .badge-info { background: #e3f2fd; color: #0d47a1; border: 1px solid #bbdefb; }
-        .badge-crit { background: #ffebee; color: #c62828; border: 1px solid #ef9a9a; }
+        .badge-ok   { background: #e8f5e9; color: #1b5e20; border: 1px solid #a5d6a7; }
+        .badge-cal  { background: #fff3e0; color: #e65100; border: 1px solid #ffcc80; }
+        .badge-info { background: #e3f2fd; color: #0d47a1; border: 1px solid #90caf9; }
+        .badge-crit { background: #ffebee; color: #b71c1c; border: 1px solid #ef9a9a; }
 
         .stats-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 6px 12px;
             font-size: 12px;
-            color: #555;
+            color: #455a64;
             margin-top: 8px;
         }
-        .stats-grid strong { color: #222; font-variant-numeric: tabular-nums; }
+        .stats-grid strong {
+            font-family: "Consolas", "Courier New", monospace;
+            color: #1e272e;
+            font-variant-numeric: tabular-nums;
+        }
 
         .health-bar-bg {
-            background: #e0e0e0;
-            border-radius: 6px;
-            height: 8px;
+            background: #cfd8dc;
+            border: 1px solid #b0bec5;
+            border-radius: 4px;
+            height: 10px;
             width: 100%;
             overflow: hidden;
             margin-top: 6px;
@@ -113,19 +138,20 @@ void setupIAMonitorPage(AsyncWebServer &server)
             height: 100%;
             width: 100%;
             background: #2e7d32;
-            border-radius: 6px;
+            border-radius: 3px;
             transition: width 0.4s ease, background-color 0.4s ease;
         }
 
         .ia-alert-line {
             margin-top: 8px;
-            padding: 6px 8px;
-            border-radius: 6px;
+            padding: 7px 9px;
+            border-radius: 4px;
             background: #e3f2fd;
             color: #0d47a1;
-            border: 1px solid #bbdefb;
+            border: 1px solid #90caf9;
+            border-left: 4px solid #1565c0;
             font-size: 12px;
-            font-weight: 600;
+            font-weight: 700;
             display: none;
         }
         .ia-alert-line.active { display: block; }
@@ -133,52 +159,73 @@ void setupIAMonitorPage(AsyncWebServer &server)
         .sys-strip {
             display: flex;
             justify-content: space-between;
+            font-family: "Consolas", "Courier New", monospace;
             font-size: 12px;
-            color: #555;
-            background: #f8f9fa;
-            border: 1px solid #e0e0e0;
-            border-radius: 8px;
-            padding: 8px 12px;
+            font-weight: 700;
+            color: #cfd8dc;
+            background: #1e272e;
+            border: 1px solid #37474f;
+            border-radius: 5px;
+            padding: 9px 12px;
             margin-bottom: 14px;
             font-variant-numeric: tabular-nums;
         }
+        .sys-strip strong { color: #ff9800; }
 
         .btn {
             display: block;
             width: 100%;
             padding: 11px;
-            font-size: 14px;
-            font-weight: 600;
+            font-size: 13px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
             margin: 8px auto;
-            border-radius: 6px;
+            border-radius: 5px;
             color: #ffffff;
             text-decoration: none;
             text-align: center;
             border: none;
+            border-bottom: 3px solid rgba(0, 0, 0, 0.28);
             cursor: pointer;
-            transition: opacity 0.2s;
+            transition: opacity 0.2s, transform 0.1s;
         }
-        .btn:hover { opacity: 0.88; }
-        .btn-reset { background-color: #c62828; }
-        .btn-back  { background-color: #607d8b; }
-        .btn-theme { background-color: #ff9800; }
+        .btn:hover { opacity: 0.92; }
+        .btn:active { transform: translateY(1px); }
+        .btn-reset { background-color: #b71c1c; }
+        .btn-back  { background-color: #455a64; }
+        .btn-theme { background-color: #ef6c00; }
 
-        body.night-mode { background-color: #121212; color: #e0e0e0; }
-        body.night-mode .container { background-color: #1e1e1e; box-shadow: 0 4px 16px rgba(0,0,0,0.5); }
-        body.night-mode .metric-card { background: #2a2a2a; border-color: #383838; }
-        body.night-mode .metric-title { color: #f0f0f0; }
-        body.night-mode .subtitle, body.night-mode .stats-grid { color: #bbb; }
-        body.night-mode .stats-grid strong { color: #fff; }
-        body.night-mode .sys-strip { background: #262626; border-color: #383838; color: #ccc; }
-        body.night-mode .health-bar-bg { background: #444; }
+        body.night-mode {
+            background-color: #0d1117;
+            background-image: linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+                              linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+            color: #e6edf3;
+        }
+        body.night-mode .container {
+            background-color: #161b22;
+            border-color: #30363d;
+            border-top-color: #e65100;
+            box-shadow: 0 12px 32px rgba(0,0,0,0.7);
+        }
+        body.night-mode .title { background-color: #0d1117; color: #ffa726; }
+        body.night-mode .metric-card { background: #1f2630; border-color: #30363d; border-left-color: #0288d1; }
+        body.night-mode .metric-title { color: #f0f6fc; }
+        body.night-mode .subtitle, body.night-mode .stats-grid { color: #b0bec5; }
+        body.night-mode .stats-grid strong { color: #ffffff; }
+        body.night-mode .sys-strip { background: #0d1117; border-color: #30363d; color: #b0bec5; }
+        body.night-mode .health-bar-bg { background: #2b3542; border-color: #30363d; }
 
         .footer {
             width: 100%;
-            background-color: #e65100;
-            color: #ffffff;
+            background-color: #1e272e;
+            border-top: 3px solid #e65100;
+            color: #cfd8dc;
             text-align: center;
             padding: 10px 0;
             font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.4px;
             margin-top: auto;
         }
     </style>

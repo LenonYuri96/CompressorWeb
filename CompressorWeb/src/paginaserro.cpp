@@ -23,46 +23,84 @@ String generateErrorPage(const String &title, const String &message, const Strin
            title + R"rawliteral(</title> <!-- Define o título da página que aparece na aba do navegador -->
     <style>
         body {
-            font-family: Arial, sans-serif; /* Define a fonte padrão da página para Arial e usa sans-serif como fonte secundária */
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; /* Define a fonte padrão industrial */
             display: flex; /* Usa o modelo de layout flexbox para centralizar o conteúdo */
             justify-content: center; /* Alinha o conteúdo horizontalmente no centro da página */
             align-items: center; /* Alinha o conteúdo verticalmente no centro da página */
-            height: 100vh; /* Define a altura da página como 100% da altura da viewport (tela visível) */
+            min-height: 100vh; /* Define a altura da página como 100% da altura da viewport (tela visível) */
             margin: 0; /* Remove as margens padrão do navegador */
-            background-color: #f4f4f4; /* Define a cor de fundo da página como cinza claro */
+            background-color: #d6dde4; /* Fundo chapa aço industrial */
+            background-image: linear-gradient(rgba(30, 39, 46, 0.05) 1px, transparent 1px),
+                              linear-gradient(90deg, rgba(30, 39, 46, 0.05) 1px, transparent 1px);
+            background-size: 20px 20px;
+            color: #1e272e;
+        }
+        body.night-mode {
+            background-color: #0d1117;
+            background-image: linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+                              linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+            color: #e6edf3;
         }
         .container {
             text-align: center; /* Centraliza o texto dentro do container */
-            background-color: #fff; /* Define a cor de fundo do container como branco */
-            padding: 20px; /* Adiciona 20 pixels de espaçamento interno ao redor do conteúdo do container */
-            border-radius: 8px; /* Arredonda os cantos do container com um raio de 8 pixels */
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); /* Adiciona uma sombra ao container para um efeito de profundidade sutil */
-            max-width: 600px; /* Define a largura máxima do container como 600 pixels */
-            width: 100%; /* Define a largura do container como 100% da largura disponível do pai */
+            background-color: #eceff1; /* Chapa metálica clara */
+            padding: 24px 22px; /* Adiciona espaçamento interno ao redor do conteúdo do container */
+            border-radius: 8px; /* Arredonda os cantos do container */
+            border: 2px solid #90a4ae; /* Borda metálica do gabinete */
+            border-top: 6px solid #c62828; /* Faixa superior de alarme/bloqueio */
+            box-shadow: 0 10px 28px rgba(15, 23, 30, 0.22), inset 0 1px 0 #ffffff; /* Profundidade industrial */
+            max-width: 460px; /* Define a largura máxima do container */
+            width: 92%; /* Responsivo para telas móveis */
+        }
+        body.night-mode .container {
+            background-color: #161b22;
+            border-color: #30363d;
+            border-top-color: #c62828;
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.7);
         }
         h1 {
-            color: #e74c3c; /* Define a cor do texto do título como vermelho */
-            font-size: 36px; /* Define o tamanho da fonte do título como 36 pixels */
-            margin-bottom: 10px; /* Adiciona 10 pixels de espaço abaixo do título */
+            color: #ff5252; /* Destaque de alarme sobre barra escura */
+            background-color: #1e272e;
+            padding: 10px 12px;
+            border-radius: 5px;
+            border-left: 5px solid #c62828;
+            border-right: 5px solid #c62828;
+            font-size: 20px; /* Tamanho proporcional ao painel */
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 16px; /* Adiciona espaço abaixo do título */
         }
         p {
-            color: #555; /* Define a cor do texto dos parágrafos como cinza escuro */
-            font-size: 18px; /* Define o tamanho da fonte dos parágrafos como 18 pixels */
-            margin-bottom: 20px; /* Adiciona 20 pixels de espaço abaixo do parágrafo */
+            color: #37474f; /* Texto técnico escuro */
+            font-size: 15px; /* Legibilidade em campo */
+            font-weight: 600;
+            line-height: 1.5;
+            margin-bottom: 22px; /* Adiciona espaço abaixo do parágrafo */
+        }
+        body.night-mode p {
+            color: #cfd8dc;
         }
         a {
             text-decoration: none; /* Remove o sublinhado dos links para estilizar como botões */
-            color: #3498db; /* Define a cor do texto dos links como azul */
-            font-weight: bold; /* Define o peso da fonte dos links como negrito */
-            padding: 10px 20px; /* Adiciona 10 pixels de espaçamento interno vertical e 20 pixels horizontal ao link */
-            border: 2px solid #3498db; /* Define uma borda azul ao redor do link */
-            border-radius: 5px; /* Arredonda os cantos da borda do link com um raio de 5 pixels */
-            display: inline-block; /* Faz com que o link se comporte como um bloco inline para melhor controle de espaçamento e layout */
-            transition: all 0.3s; /* Adiciona uma transição suave de 0,3 segundos para todas as propriedades CSS ao passar o mouse */
+            color: #ffffff; /* Texto branco */
+            background-color: #0277bd; /* Botão azul petróleo industrial */
+            font-weight: 700; /* Negrito */
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            padding: 11px 22px; /* Espaçamento interno do botão */
+            border: none;
+            border-bottom: 3px solid rgba(0, 0, 0, 0.28); /* Efeito tecla de IHM */
+            border-radius: 5px; /* Cantos técnicos */
+            display: inline-block; /* Comportamento de bloco inline */
+            transition: opacity 0.2s, transform 0.1s; /* Transição suave */
         }
         a:hover {
-            text-decoration: underline; /* Adiciona um sublinhado ao link quando o mouse passa sobre ele */
-            background-color: #f0f0f0; /* Altera a cor de fundo do link quando o mouse passa sobre ele */
+            opacity: 0.9;
+        }
+        a:active {
+            transform: translateY(1px);
         }
     </style>
 </head>
@@ -75,6 +113,11 @@ String generateErrorPage(const String &title, const String &message, const Strin
         <a href=")rawliteral" +
            linkHref + R"rawliteral(">)rawliteral" + linkText + R"rawliteral(</a> <!-- Link para navegação para a URL fornecida -->
     </div>
+    <script>
+        if (localStorage.getItem('energizar_theme') === 'night') {
+            document.body.classList.add('night-mode');
+        }
+    </script>
 </body>
 </html>
 )rawliteral";

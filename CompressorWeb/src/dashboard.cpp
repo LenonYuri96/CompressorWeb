@@ -46,6 +46,10 @@
  *        quando ha alarme de sobrecarga, manutencao, pressostato ou horario.
  *      - Alertas preditivos da IA local (ia_local.cpp) sao exibidos na caixa
  *        .message-box.info ja existente sem alterar a estetica do painel.
+ *
+ *   7. IDENTIDADE VISUAL IHM / PAINEL DE COMANDO INDUSTRIAL (v2.3.0):
+ *      - Botoeiras circulares 22 mm com aro metalico e lente luminosa.
+ *      - Chassi em cinza industrial RAL 7035 e modo escuro SCADA.
  * ============================================================================
  */
 
@@ -103,7 +107,7 @@ void setupDashboardPage(AsyncWebServer &server)
     <title>Painel de Controle | EnergizAR</title>
     <style>
         /* -------------------------------------------------------------
-           ESTILOS GERAIS E RESET CSS
+           ESTILOS GERAIS E RESET CSS (IHM INDUSTRIAL)
            ------------------------------------------------------------- */
         * {
             box-sizing: border-box;
@@ -113,8 +117,11 @@ void setupDashboardPage(AsyncWebServer &server)
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-            background-color: #f0f2f5;
-            color: #212529;
+            background-color: #d6dde4;
+            background-image: linear-gradient(rgba(30, 39, 46, 0.05) 1px, transparent 1px),
+                              linear-gradient(90deg, rgba(30, 39, 46, 0.05) 1px, transparent 1px);
+            background-size: 20px 20px;
+            color: #1e272e;
             min-height: 100vh;
             display: flex;
             flex-direction: column;
@@ -124,102 +131,118 @@ void setupDashboardPage(AsyncWebServer &server)
         }
 
         /* -------------------------------------------------------------
-           CONTAINER CENTRALIZADO
+           CONTAINER CENTRALIZADO (GABINETE DE COMANDO)
            ------------------------------------------------------------- */
         .dashboard-container {
-            background-color: #ffffff;
-            padding: 24px;
-            border-radius: 12px;
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+            background-color: #eceff1;
+            padding: 22px 20px;
+            border-radius: 8px;
+            border: 2px solid #90a4ae;
+            border-top: 6px solid #e65100;
+            box-shadow: 0 10px 28px rgba(15, 23, 30, 0.22), inset 0 1px 0 #ffffff;
             text-align: center;
             width: 92%;
-            max-width: 440px;
+            max-width: 450px;
             margin: 20px auto;
-            transition: background-color 0.3s ease, box-shadow 0.3s ease;
+            position: relative;
+            transition: background-color 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
         }
 
         .dashboard-title {
-            font-size: 22px;
-            font-weight: 700;
-            margin-bottom: 20px;
-            color: #e65100;
-            letter-spacing: 0.5px;
+            font-size: 19px;
+            font-weight: 800;
+            margin-bottom: 18px;
+            padding: 10px 12px;
+            background-color: #1e272e;
+            color: #ff9800;
+            border-radius: 5px;
+            border-left: 5px solid #e65100;
+            border-right: 5px solid #e65100;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.4);
         }
 
         /* -------------------------------------------------------------
-           CARDS INDIVIDUAIS DOS MOTORES
+           CARDS INDIVIDUAIS DOS MOTORES (MODULOS DE PAINEL DIN)
            ------------------------------------------------------------- */
         .motor-card {
-            background: #fafafa;
-            border: 1px solid #e0e0e0;
-            border-radius: 10px;
+            background: #f7f9fa;
+            border: 1px solid #b0bec5;
+            border-left: 5px solid #455a64;
+            border-radius: 6px;
             padding: 16px;
-            margin-bottom: 16px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.03);
+            margin-bottom: 14px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.08), inset 0 1px 0 #ffffff;
             transition: border-color 0.2s ease, background 0.2s ease;
         }
 
         .motor-card p {
-            margin-top: 10px;
-            font-size: 15px;
-            font-weight: 700;
-            color: #333333;
+            margin-top: 12px;
+            font-size: 14px;
+            font-weight: 800;
+            color: #263238;
+            text-transform: uppercase;
+            letter-spacing: 0.7px;
         }
 
         /* -------------------------------------------------------------
-           BOTOES CIRCULARES DE ACIONAMENTO
+           BOTOES CIRCULARES DE ACIONAMENTO (BOTOEIRA INDUSTRIAL 22mm)
            ------------------------------------------------------------- */
         .round-button {
-            width: 96px;
-            height: 96px;
+            width: 98px;
+            height: 98px;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
             text-align: center;
-            font-size: 13px;
-            font-weight: 700;
+            font-size: 12px;
+            font-weight: 800;
             margin: 0 auto;
             cursor: pointer;
-            transition: transform 0.15s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+            transition: transform 0.12s ease, background-color 0.2s ease, box-shadow 0.2s ease;
             color: #ffffff;
-            border: 3px solid rgba(0, 0, 0, 0.15);
-            outline: none;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            border: 5px solid #cfd8dc;
+            outline: 2px solid #546e7a;
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.35), inset 0 3px 6px rgba(255, 255, 255, 0.28), inset 0 -4px 8px rgba(0, 0, 0, 0.35);
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.8px;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.65);
             user-select: none;
         }
 
         .round-button:active {
             transform: scale(0.95);
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4), inset 0 4px 8px rgba(0, 0, 0, 0.45);
         }
 
-        /* Cores de Estado Operacional */
-        .btn-ligar       { background-color: #2e7d32; } /* Verde escuro */
-        .btn-desligar    { background-color: #c62828; } /* Vermelho */
-        .btn-overload    { background-color: #d32f2f; } /* Falha termica */
-        .btn-maintenance { background-color: #ef6c00; } /* Alarme de chave */
-        .btn-disabled    { background-color: #757575; } /* Bloqueio / Timer */
+        /* Cores de Estado Operacional (Norma IEC / Sinaleiro Industrial) */
+        .btn-ligar       { background: radial-gradient(circle at 35% 30%, #43a047, #1b5e20); } /* Verde sinaleiro */
+        .btn-desligar    { background: radial-gradient(circle at 35% 30%, #e53935, #8e0000); } /* Vermelho parada */
+        .btn-overload    { background: radial-gradient(circle at 35% 30%, #f44336, #b71c1c); } /* Falha termica */
+        .btn-maintenance { background: radial-gradient(circle at 35% 30%, #fb8c00, #e65100); } /* Ambar manutencao */
+        .btn-disabled    { background: radial-gradient(circle at 35% 30%, #78909c, #37474f); } /* Aco bloqueado */
 
         /* Estado Bloqueado por Temporizador de Seguranca */
         .btn-locked {
             cursor: not-allowed !important;
-            opacity: 0.72;
-            filter: grayscale(30%);
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+            opacity: 0.78;
+            filter: saturate(75%);
+            box-shadow: 0 3px 6px rgba(0, 0, 0, 0.25), inset 0 2px 5px rgba(0, 0, 0, 0.35);
         }
 
         /* -------------------------------------------------------------
-           EXIBICAO DA CONTAGEM REGRESSIVA SINCRONIZADA
+           EXIBICAO DA CONTAGEM REGRESSIVA SINCRONIZADA (VISOR DIGITAL)
            ------------------------------------------------------------- */
         .countdown {
             margin-top: 8px;
+            font-family: "Consolas", "Courier New", monospace;
             font-size: 13px;
             font-weight: 700;
-            color: #c62828;
+            color: #b71c1c;
             min-height: 18px;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.6px;
             font-variant-numeric: tabular-nums;
         }
 
@@ -229,77 +252,104 @@ void setupDashboardPage(AsyncWebServer &server)
         .message-box {
             margin-top: 8px;
             padding: 8px 10px;
-            border-radius: 6px;
+            border-radius: 4px;
             font-size: 12px;
-            font-weight: 600;
+            font-weight: 700;
             text-align: center;
             display: none;
         }
 
         .message-box.active { display: block; }
-        .message-box.error   { background: #ffebee; color: #c62828; border: 1px solid #ef9a9a; }
-        .message-box.warning { background: #fff3e0; color: #ef6c00; border: 1px solid #ffe0b2; }
-        .message-box.info    { background: #e3f2fd; color: #0d47a1; border: 1px solid #bbdefb; }
+        .message-box.error   { background: #ffebee; color: #b71c1c; border: 1px solid #ef9a9a; border-left: 4px solid #c62828; }
+        .message-box.warning { background: #fff3e0; color: #e65100; border: 1px solid #ffcc80; border-left: 4px solid #ef6c00; }
+        .message-box.info    { background: #e3f2fd; color: #0d47a1; border: 1px solid #90caf9; border-left: 4px solid #1565c0; }
 
         /* -------------------------------------------------------------
-           BOTOES DE NAVEGACAO E RECURSOS
+           BOTOES DE NAVEGACAO E RECURSOS (TECLAS DE IHM)
            ------------------------------------------------------------- */
         .btn-link {
             display: block;
             width: 100%;
             padding: 11px;
-            font-size: 14px;
-            font-weight: 600;
+            font-size: 13px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
             margin: 8px auto;
-            border-radius: 6px;
+            border-radius: 5px;
             color: #ffffff;
             text-decoration: none;
             text-align: center;
             border: none;
+            border-bottom: 3px solid rgba(0, 0, 0, 0.28);
             cursor: pointer;
-            transition: opacity 0.2s ease;
+            transition: opacity 0.2s ease, transform 0.1s ease;
         }
 
-        .btn-link:hover { opacity: 0.88; }
+        .btn-link:hover { opacity: 0.92; }
+        .btn-link:active { transform: translateY(1px); }
 
-        .btn-link-wifi     { background-color: #0288d1; }
-        .btn-link-umidade  { background-color: #00897b; }
-        .btn-link-pressao  { background-color: #455a64; }
-        .btn-link-theme    { background-color: #ff9800; }
-        .btn-link-logout   { background-color: #c62828; }
+        .btn-link-wifi     { background-color: #0277bd; }
+        .btn-link-umidade  { background-color: #00695c; }
+        .btn-link-pressao  { background-color: #37474f; }
+        .btn-link-theme    { background-color: #ef6c00; }
+        .btn-link-logout   { background-color: #b71c1c; }
 
         /* -------------------------------------------------------------
-           TEMA NOTURNO INDUSTRIAL (NIGHT MODE)
+           TEMA NOTURNO INDUSTRIAL (SALA DE CONTROLE SCADA)
            ------------------------------------------------------------- */
         body.night-mode {
-            background-color: #121212;
-            color: #e0e0e0;
+            background-color: #0d1117;
+            background-image: linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+                              linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+            color: #e6edf3;
         }
 
         body.night-mode .dashboard-container {
-            background-color: #1e1e1e;
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+            background-color: #161b22;
+            border-color: #30363d;
+            border-top-color: #e65100;
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.7);
+        }
+
+        body.night-mode .dashboard-title {
+            background-color: #0d1117;
+            color: #ffa726;
         }
 
         body.night-mode .motor-card {
-            background: #2a2a2a;
-            border-color: #383838;
+            background: #1f2630;
+            border-color: #30363d;
+            border-left-color: #ff9800;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
         }
 
         body.night-mode .motor-card p {
-            color: #ffffff;
+            color: #f0f6fc;
+        }
+
+        body.night-mode .round-button {
+            border-color: #455a64;
+            outline-color: #1c242b;
+        }
+
+        body.night-mode .countdown {
+            color: #ff8a80;
         }
 
         /* -------------------------------------------------------------
-           RODAPE INSTITUCIONAL
+           RODAPE INSTITUCIONAL (BARRA DE ACO INDUSTRIAL)
            ------------------------------------------------------------- */
         .footer {
             width: 100%;
-            background-color: #e65100;
-            color: #ffffff;
+            background-color: #1e272e;
+            border-top: 3px solid #e65100;
+            color: #cfd8dc;
             text-align: center;
             padding: 10px 0;
             font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.4px;
             margin-top: auto;
         }
     </style>

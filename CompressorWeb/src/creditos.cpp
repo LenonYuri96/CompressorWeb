@@ -38,8 +38,11 @@ void setupCreditosPage(AsyncWebServer &server)
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-            background-color: #f0f2f5;
-            color: #212529;
+            background-color: #d6dde4;
+            background-image: linear-gradient(rgba(30, 39, 46, 0.05) 1px, transparent 1px),
+                              linear-gradient(90deg, rgba(30, 39, 46, 0.05) 1px, transparent 1px);
+            background-size: 20px 20px;
+            color: #1e272e;
             min-height: 100vh;
             display: flex;
             flex-direction: column;
@@ -52,29 +55,41 @@ void setupCreditosPage(AsyncWebServer &server)
            CONTAINER PRINCIPAL ESTILO CARD
            ------------------------------------------------------------- */
         .credits-container {
-            background-color: #ffffff;
-            padding: 28px 24px;
-            border-radius: 12px;
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+            background-color: #eceff1;
+            padding: 24px 20px;
+            border-radius: 8px;
+            border: 2px solid #90a4ae;
+            border-top: 6px solid #e65100;
+            box-shadow: 0 10px 28px rgba(15, 23, 30, 0.22), inset 0 1px 0 #ffffff;
             text-align: center;
             width: 92%;
             max-width: 480px;
             margin: 20px auto;
-            transition: background-color 0.3s ease, box-shadow 0.3s ease;
+            transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
         }
 
         .title {
-            font-size: 24px;
-            font-weight: 700;
-            color: #e65100;
-            margin-bottom: 4px;
-            letter-spacing: 0.5px;
+            font-size: 19px;
+            font-weight: 800;
+            margin-bottom: 6px;
+            padding: 10px 12px;
+            background-color: #1e272e;
+            color: #ff9800;
+            border-radius: 5px;
+            border-left: 5px solid #e65100;
+            border-right: 5px solid #e65100;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.4);
         }
 
         .subtitle {
-            font-size: 13px;
-            color: #666;
-            margin-bottom: 22px;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #546e7a;
+            margin-bottom: 20px;
             line-height: 1.4;
         }
 
@@ -82,23 +97,23 @@ void setupCreditosPage(AsyncWebServer &server)
            SEÇÕES E SUBTÍTULOS
            ------------------------------------------------------------- */
         .section-header {
-            font-size: 13px;
-            font-weight: 700;
+            font-size: 12px;
+            font-weight: 800;
             text-transform: uppercase;
             letter-spacing: 0.8px;
-            color: #555;
+            color: #37474f;
             text-align: left;
             margin: 18px 0 10px 0;
             display: flex;
             align-items: center;
-            gap: 6px;
+            gap: 8px;
         }
 
         .section-header::after {
             content: '';
             flex: 1;
             height: 1px;
-            background-color: #e0e0e0;
+            background-color: #b0bec5;
         }
 
         /* -------------------------------------------------------------
@@ -112,9 +127,10 @@ void setupCreditosPage(AsyncWebServer &server)
         }
 
         .mentor-card {
-            background: #fafafa;
-            border: 1px solid #e0e0e0;
-            border-radius: 8px;
+            background: #f7f9fa;
+            border: 1px solid #b0bec5;
+            border-left: 4px solid #37474f;
+            border-radius: 6px;
             padding: 12px 8px;
             text-decoration: none;
             color: inherit;
@@ -122,38 +138,42 @@ void setupCreditosPage(AsyncWebServer &server)
             flex-direction: column;
             align-items: center;
             justify-content: center;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.06), inset 0 1px 0 #ffffff;
             transition: all 0.2s ease;
         }
 
         .mentor-card:hover {
             background-color: #fff3e0;
             border-color: #ff9800;
+            border-left-color: #e65100;
             transform: translateY(-2px);
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
         }
 
         .mentor-name {
             font-size: 14px;
-            font-weight: 700;
-            color: #212529;
+            font-weight: 800;
+            color: #1e272e;
             margin-top: 4px;
         }
 
         .mentor-role {
-            font-size: 11px;
+            font-size: 10px;
             color: #e65100;
-            font-weight: 600;
+            font-weight: 800;
             text-transform: uppercase;
+            letter-spacing: 0.4px;
         }
 
         .github-badge {
             margin-top: 6px;
+            font-family: "Consolas", "Courier New", monospace;
             font-size: 11px;
-            color: #0288d1;
+            color: #0277bd;
             display: flex;
             align-items: center;
             gap: 4px;
-            font-weight: 600;
+            font-weight: 700;
         }
 
         /* -------------------------------------------------------------
@@ -168,22 +188,24 @@ void setupCreditosPage(AsyncWebServer &server)
         }
 
         .student-chip {
-            background: #f5f5f5;
-            border: 1px solid #ddd;
-            border-radius: 20px;
-            padding: 7px 14px;
-            font-size: 13px;
-            font-weight: 600;
-            color: #333;
+            background: #f7f9fa;
+            border: 1px solid #b0bec5;
+            border-left: 4px solid #0277bd;
+            border-radius: 4px;
+            padding: 7px 12px;
+            font-size: 12px;
+            font-weight: 700;
+            color: #263238;
             display: inline-flex;
             align-items: center;
             gap: 6px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
             transition: all 0.2s ease;
         }
 
         .student-chip:hover {
             background: #e8f5e9;
-            border-color: #81c784;
+            border-color: #2e7d32;
             color: #1b5e20;
             transform: scale(1.03);
         }
@@ -192,19 +214,23 @@ void setupCreditosPage(AsyncWebServer &server)
            INFO INSTITUCIONAL (TRILHAS DE FUTURO)
            ------------------------------------------------------------- */
         .institution-box {
-            background: #f8f9fa;
-            border-left: 4px solid #e65100;
-            padding: 10px 14px;
-            border-radius: 4px;
+            background: #f7f9fa;
+            border: 1px solid #b0bec5;
+            border-left: 5px solid #e65100;
+            padding: 11px 14px;
+            border-radius: 6px;
             text-align: left;
             font-size: 12px;
-            color: #555;
+            color: #37474f;
             margin-bottom: 20px;
-            line-height: 1.4;
+            line-height: 1.5;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.06);
         }
 
         .institution-box strong {
-            color: #222;
+            color: #1e272e;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
         }
 
         /* -------------------------------------------------------------
@@ -220,54 +246,71 @@ void setupCreditosPage(AsyncWebServer &server)
             display: block;
             width: 100%;
             padding: 11px;
-            font-size: 14px;
-            font-weight: 600;
-            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            border-radius: 5px;
             color: #ffffff;
             text-decoration: none;
             text-align: center;
             border: none;
+            border-bottom: 3px solid rgba(0, 0, 0, 0.28);
             cursor: pointer;
-            transition: opacity 0.2s ease;
+            transition: opacity 0.2s ease, transform 0.1s ease;
         }
 
-        .btn:hover { opacity: 0.88; }
-        .btn-back  { background-color: #607d8b; }
-        .btn-theme { background-color: #ff9800; }
+        .btn:hover { opacity: 0.92; }
+        .btn:active { transform: translateY(1px); }
+        .btn-back  { background-color: #455a64; }
+        .btn-theme { background-color: #ef6c00; }
 
         /* -------------------------------------------------------------
            TEMA ESCURO (NIGHT MODE)
            ------------------------------------------------------------- */
         body.night-mode {
-            background-color: #121212;
-            color: #e0e0e0;
+            background-color: #0d1117;
+            background-image: linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+                              linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+            color: #e6edf3;
         }
 
         body.night-mode .credits-container {
-            background-color: #1e1e1e;
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+            background-color: #161b22;
+            border-color: #30363d;
+            border-top-color: #e65100;
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.7);
         }
 
-        body.night-mode .subtitle { color: #aaa; }
-        body.night-mode .section-header { color: #aaa; }
-        body.night-mode .section-header::after { background-color: #383838; }
+        body.night-mode .title {
+            background-color: #0d1117;
+            color: #ffa726;
+        }
+
+        body.night-mode .subtitle { color: #b0bec5; }
+        body.night-mode .section-header { color: #b0bec5; }
+        body.night-mode .section-header::after { background-color: #30363d; }
 
         body.night-mode .mentor-card {
-            background: #2a2a2a;
-            border-color: #383838;
+            background: #1f2630;
+            border-color: #30363d;
+            border-left-color: #ff9800;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
         }
 
         body.night-mode .mentor-card:hover {
-            background-color: #33261a;
+            background-color: #2b2118;
             border-color: #e65100;
         }
 
-        body.night-mode .mentor-name { color: #f0f0f0; }
+        body.night-mode .mentor-name { color: #f0f6fc; }
+        body.night-mode .github-badge { color: #4fc3f7; }
 
         body.night-mode .student-chip {
-            background: #2a2a2a;
-            border-color: #404040;
-            color: #ddd;
+            background: #1f2630;
+            border-color: #30363d;
+            border-left-color: #0288d1;
+            color: #e6edf3;
         }
 
         body.night-mode .student-chip:hover {
@@ -277,22 +320,27 @@ void setupCreditosPage(AsyncWebServer &server)
         }
 
         body.night-mode .institution-box {
-            background: #262626;
-            color: #bbb;
+            background: #1f2630;
+            border-color: #30363d;
+            border-left-color: #e65100;
+            color: #b0bec5;
         }
 
-        body.night-mode .institution-box strong { color: #fff; }
+        body.night-mode .institution-box strong { color: #ffffff; }
 
         /* -------------------------------------------------------------
            RODAPÉ PADRÃO ENERGIZAR
            ------------------------------------------------------------- */
         .footer {
             width: 100%;
-            background-color: #e65100;
-            color: #ffffff;
+            background-color: #1e272e;
+            border-top: 3px solid #e65100;
+            color: #cfd8dc;
             text-align: center;
             padding: 10px 0;
             font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.4px;
             margin-top: auto;
         }
     </style>

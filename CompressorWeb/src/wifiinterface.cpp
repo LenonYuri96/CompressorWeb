@@ -5,7 +5,7 @@
  * DESCRIÇÃO: Gera a página HTML/CSS/JavaScript responsiva para configuração e
  *            gerenciamento das redes Wi-Fi. Exibe o IP da rede externa (STA)
  *            e do modo AP em tempo real, varredura no ar com seleção por clique,
- *            persistência no SPIFFS e modos de alto contraste e noturno.
+ *            persistência no SPIFFS e tema escuro industrial.
  * ============================================================================
  */
 
@@ -28,7 +28,7 @@ const char *getWiFiManagementPage()
     
     <style>
         /* -----------------------------------------------------------------
-           1. ESTILOS GERAIS E RESET CSS
+           1. ESTILOS GERAIS E RESET CSS (IHM INDUSTRIAL)
            ----------------------------------------------------------------- */
         * { 
             box-sizing: border-box; 
@@ -38,21 +38,27 @@ const char *getWiFiManagementPage()
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background-color: #f0f2f5;
-            color: #212529;
+            background-color: #d6dde4;
+            background-image: linear-gradient(rgba(30, 39, 46, 0.05) 1px, transparent 1px),
+                              linear-gradient(90deg, rgba(30, 39, 46, 0.05) 1px, transparent 1px);
+            background-size: 20px 20px;
+            color: #1e272e;
             min-height: 100vh;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: space-between;
+            transition: background-color 0.3s ease, color 0.3s ease;
         }
 
         /* -----------------------------------------------------------------
            2. TEMAS DE ACESSIBILIDADE (MODO NOTURNO E ALTO CONTRASTE)
            ----------------------------------------------------------------- */
         body.night-mode { 
-            background-color: #121212; 
-            color: #e0e0e0; 
+            background-color: #0d1117; 
+            background-image: linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+                              linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+            color: #e6edf3; 
         }
 
         body.high-contrast { 
@@ -61,18 +67,22 @@ const char *getWiFiManagementPage()
         }
 
         .container {
-            background-color: #ffffff;
-            width: 100%;
-            max-width: 440px;
-            padding: 24px;
+            background-color: #eceff1;
+            width: 92%;
+            max-width: 450px;
+            padding: 22px 20px;
             margin: 20px auto;
-            border-radius: 12px;
-            box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+            border-radius: 8px;
+            border: 2px solid #90a4ae;
+            border-top: 6px solid #e65100;
+            box-shadow: 0 10px 28px rgba(15, 23, 30, 0.22), inset 0 1px 0 #ffffff;
         }
 
         body.night-mode .container { 
-            background-color: #1e1e1e; 
-            box-shadow: 0 4px 16px rgba(0,0,0,0.4); 
+            background-color: #161b22; 
+            border-color: #30363d;
+            border-top-color: #e65100;
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.7); 
         }
 
         body.high-contrast .container { 
@@ -81,29 +91,45 @@ const char *getWiFiManagementPage()
         }
 
         .title {
-            font-size: 22px;
-            font-weight: 700;
+            font-size: 19px;
+            font-weight: 800;
             text-align: center;
-            margin-bottom: 12px;
-            color: #e65100;
+            margin-bottom: 14px;
+            padding: 10px 12px;
+            background-color: #1e272e;
+            color: #ff9800;
+            border-radius: 5px;
+            border-left: 5px solid #e65100;
+            border-right: 5px solid #e65100;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.4);
+        }
+
+        body.night-mode .title {
+            background-color: #0d1117;
+            color: #ffa726;
         }
 
         /* -----------------------------------------------------------------
            PAINEL DE ENDEREÇAMENTO IP (REDE EXTERNA E AP)
            ----------------------------------------------------------------- */
         .ip-panel {
-            background: #fafafa;
-            border: 1px solid #e0e0e0;
-            border-radius: 8px;
+            background: #f7f9fa;
+            border: 1px solid #b0bec5;
+            border-left: 5px solid #0277bd;
+            border-radius: 6px;
             padding: 10px 14px;
             margin-bottom: 16px;
             text-align: left;
             font-size: 13px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.06);
         }
 
         body.night-mode .ip-panel {
-            background: #262626;
-            border-color: #404040;
+            background: #1f2630;
+            border-color: #30363d;
+            border-left-color: #0288d1;
         }
 
         .ip-row {
@@ -114,14 +140,15 @@ const char *getWiFiManagementPage()
         }
 
         .ip-row strong {
-            color: #555;
+            color: #455a64;
         }
 
         body.night-mode .ip-row strong {
-            color: #bbb;
+            color: #b0bec5;
         }
 
         .ip-value {
+            font-family: "Consolas", "Courier New", monospace;
             font-weight: 700;
             font-variant-numeric: tabular-nums;
         }
@@ -131,42 +158,46 @@ const char *getWiFiManagementPage()
         }
 
         .ip-sta-offline {
-            color: #d32f2f;
-            font-weight: 600;
+            color: #c62828;
+            font-weight: 700;
         }
 
         .ip-ap-val {
-            color: #0288d1;
+            color: #0277bd;
         }
 
         .section-title {
-            font-size: 14px;
-            font-weight: 700;
+            font-size: 12px;
+            font-weight: 800;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.8px;
             margin: 16px 0 8px 0;
-            color: #616161;
+            color: #37474f;
+            text-align: left;
+            border-bottom: 1px solid #b0bec5;
+            padding-bottom: 4px;
         }
 
         body.night-mode .section-title { 
-            color: #aaaaaa; 
+            color: #b0bec5;
+            border-bottom-color: #30363d;
         }
 
         /* -----------------------------------------------------------------
            3. LISTA DE ESCANEAMENTO DE REDES NO AR
            ----------------------------------------------------------------- */
         .scan-box {
-            border: 1px solid #ddd;
-            border-radius: 8px;
+            border: 1px solid #b0bec5;
+            border-radius: 6px;
             max-height: 180px;
             overflow-y: auto;
-            background: #fafafa;
+            background: #f7f9fa;
             margin-bottom: 15px;
         }
 
         body.night-mode .scan-box { 
-            background: #2a2a2a; 
-            border-color: #444444; 
+            background: #1f2630; 
+            border-color: #30363d; 
         }
 
         .network-item {
@@ -174,13 +205,13 @@ const char *getWiFiManagementPage()
             align-items: center;
             justify-content: space-between;
             padding: 10px 14px;
-            border-bottom: 1px solid #eee;
+            border-bottom: 1px solid #cfd8dc;
             cursor: pointer;
             transition: background-color 0.2s;
         }
 
         body.night-mode .network-item { 
-            border-color: #383838; 
+            border-color: #30363d; 
         }
 
         .network-item:hover { 
@@ -188,12 +219,12 @@ const char *getWiFiManagementPage()
         }
 
         body.night-mode .network-item:hover { 
-            background-color: #424242; 
+            background-color: #2b3542; 
         }
 
         .network-name {
             font-size: 14px;
-            font-weight: 600;
+            font-weight: 700;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
@@ -201,16 +232,17 @@ const char *getWiFiManagementPage()
         }
 
         .network-signal {
+            font-family: "Consolas", "Courier New", monospace;
             font-size: 12px;
-            color: #757575;
-            font-weight: 500;
+            color: #546e7a;
+            font-weight: 700;
         }
 
         .empty-hint {
             padding: 16px;
             text-align: center;
             font-size: 13px;
-            color: #888888;
+            color: #607d8b;
         }
 
         /* -----------------------------------------------------------------
@@ -223,24 +255,31 @@ const char *getWiFiManagementPage()
 
         .form-group label {
             display: block;
-            font-size: 13px;
-            font-weight: 600;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
             margin-bottom: 4px;
+            color: #37474f;
+        }
+
+        body.night-mode .form-group label {
+            color: #cfd8dc;
         }
 
         .form-group input {
             width: 100%;
             padding: 10px 12px;
             font-size: 14px;
-            border: 1px solid #ccc;
-            border-radius: 6px;
-            background: #fff;
+            border: 1px solid #90a4ae;
+            border-radius: 5px;
+            background: #ffffff;
             color: inherit;
         }
 
         body.night-mode .form-group input { 
-            background: #2d2d2d; 
-            border-color: #555555; 
+            background: #1f2630; 
+            border-color: #30363d; 
         }
 
         .pwd-group {
@@ -258,55 +297,63 @@ const char *getWiFiManagementPage()
             top: 4px;
             bottom: 4px;
             padding: 0 10px;
-            background: #eee;
-            border: none;
+            background: #cfd8dc;
+            border: 1px solid #90a4ae;
             border-radius: 4px;
             cursor: pointer;
-            font-size: 12px;
-            color: #333;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: #263238;
         }
 
         body.night-mode .pwd-btn { 
-            background: #444444; 
+            background: #30363d;
+            border-color: #455a64;
             color: #eeeeee; 
         }
 
         /* -----------------------------------------------------------------
-           5. BOTÕES DE AÇÃO DO SISTEMA
+           5. BOTÕES DE AÇÃO DO SISTEMA (TECLAS DE IHM)
            ----------------------------------------------------------------- */
         .btn {
             width: 100%;
             padding: 11px;
-            font-size: 14px;
-            font-weight: 600;
+            font-size: 13px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
             border: none;
-            border-radius: 6px;
+            border-bottom: 3px solid rgba(0, 0, 0, 0.28);
+            border-radius: 5px;
             cursor: pointer;
             margin-top: 8px;
-            transition: opacity 0.2s;
+            transition: opacity 0.2s, transform 0.1s;
         }
 
         .btn:active { 
-            opacity: 0.8; 
+            opacity: 0.85;
+            transform: translateY(1px);
         }
 
-        .btn-scan    { background-color: #0288d1; color: #fff; }
+        .btn-scan    { background-color: #0277bd; color: #fff; }
         .btn-connect { background-color: #2e7d32; color: #fff; }
-        .btn-back    { background-color: #607d8b; color: #fff; }
-        .btn-theme   { background-color: #ff9800; color: #fff; }
+        .btn-back    { background-color: #455a64; color: #fff; }
+        .btn-theme   { background-color: #ef6c00; color: #fff; }
 
         .alert {
             padding: 10px;
-            border-radius: 6px;
+            border-radius: 4px;
             font-size: 13px;
+            font-weight: 700;
             text-align: center;
             margin-top: 10px;
             display: none;
         }
 
-        .alert-success { background: #d4edda; color: #155724; display: block; }
-        .alert-error   { background: #f8d7da; color: #721c24; display: block; }
-        .alert-info    { background: #e3f2fd; color: #0d47a1; display: block; }
+        .alert-success { background: #e8f5e9; color: #1b5e20; border: 1px solid #a5d6a7; border-left: 4px solid #2e7d32; display: block; }
+        .alert-error   { background: #ffebee; color: #b71c1c; border: 1px solid #ef9a9a; border-left: 4px solid #c62828; display: block; }
+        .alert-info    { background: #e3f2fd; color: #0d47a1; border: 1px solid #90caf9; border-left: 4px solid #1565c0; display: block; }
 
         #saved-list {
             margin-top: 10px;
@@ -317,26 +364,34 @@ const char *getWiFiManagementPage()
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 8px 0;
-            border-bottom: 1px dotted #ccc;
+            padding: 8px 6px;
+            border-bottom: 1px solid #cfd8dc;
+        }
+
+        body.night-mode .saved-row {
+            border-bottom-color: #30363d;
         }
 
         .del-link {
-            color: #d32f2f;
+            color: #c62828;
             text-decoration: none;
-            font-weight: 600;
-            font-size: 12px;
+            font-weight: 700;
+            font-size: 11px;
+            text-transform: uppercase;
             padding: 4px 8px;
-            border: 1px solid #d32f2f;
+            border: 1px solid #c62828;
             border-radius: 4px;
         }
 
         .footer {
             width: 100%;
-            background: #e65100;
-            color: #fff;
+            background-color: #1e272e;
+            border-top: 3px solid #e65100;
+            color: #cfd8dc;
             text-align: center;
             font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.4px;
             padding: 10px 0;
         }
     </style>

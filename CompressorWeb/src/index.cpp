@@ -34,13 +34,17 @@ void setupIndexPage(AsyncWebServer &server)
             href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap"
             rel="stylesheet">
 
-        <title>Login</title>
+        <title>Login | EnergizAR</title>
         <style>
-        /* Estilos gerais da página */
+        /* Estilos gerais da página (Estética de Painel Industrial) */
 /* Estilos gerais para o corpo da página */
 body {
-    font-family: Arial, sans-serif;
-    background-color: #f0f2f5;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    background-color: #d6dde4;
+    background-image: linear-gradient(rgba(30, 39, 46, 0.05) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(30, 39, 46, 0.05) 1px, transparent 1px);
+    background-size: 20px 20px;
+    color: #1e272e;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -48,180 +52,170 @@ body {
     min-height: 100vh; /* Garante que o conteúdo ocupe pelo menos 100% da altura da viewport */
     margin: 0;
     padding: 0;
+    transition: background-color 0.3s ease, color 0.3s ease;
 }
         .dark-mode {
-            background-color: #181818;
-            color: #f0f0f0;
+            background-color: #0d1117;
+            background-image: linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+                              linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+            color: #e6edf3;
         }
         .login-container {
-    background-color: #ffffff;
-    padding: 20px;
+    background-color: #eceff1;
+    padding: 24px 22px;
     border-radius: 8px;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    border: 2px solid #90a4ae;
+    border-top: 6px solid #e65100;
+    box-shadow: 0 10px 28px rgba(15, 23, 30, 0.22), inset 0 1px 0 #ffffff;
     text-align: center;
-    width: 100%;
-    max-width: 400px;
+    width: 92%;
+    max-width: 410px;
     margin: auto; /* Garante que o conteúdo fique centralizado */
+    transition: background-color 0.3s ease, border-color 0.3s ease;
             }
         .dark-mode .login-container {
-            background-color: #2a2a2a;
+            background-color: #161b22;
+            border-color: #30363d;
+            border-top-color: #e65100;
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.7);
         }
         .login-title {
-            font-size: 24px;
-            font-family: "Playfair Display", serif;
+            font-size: 22px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
             margin-bottom: 20px;
-            background-image: linear-gradient(to bottom, rgb(255, 221, 0), rgba(246, 15, 15, 0.975), rgb(249, 216, 28));
-            background-clip: text;
-            -webkit-background-clip: text; 
-            -webkit-text-fill-color: transparent;
-            color: rgb(242, 95, 22);
-            font-weight: bold;
+            padding: 10px 12px;
+            background-color: #1e272e;
+            color: #ff9800;
+            border-radius: 5px;
+            border-left: 5px solid #e65100;
+            border-right: 5px solid #e65100;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            font-weight: 800;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.4);
         }
         .dark-mode .login-title {
-            color: #1e90ff;
+            background-color: #0d1117;
+            color: #ffa726;
         }
         .form-group {
-            margin-bottom: 15px;
+            margin-bottom: 14px;
         }
         .form-control {
             width: 100%;
-            padding: 10px;
-            border: 1px solid #ced4da;
+            padding: 11px 12px;
+            font-size: 14px;
+            border: 1px solid #90a4ae;
             border-radius: 5px;
+            background-color: #ffffff;
+            color: #1e272e;
             box-sizing: border-box;
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.08);
+        }
+        .form-control:focus {
+            outline: none;
+            border-color: #e65100;
         }
         .dark-mode .form-control {
-            background-color: #333;
-            color: #fff;
-            border-color: #555;
+            background-color: #1f2630;
+            color: #f0f6fc;
+            border-color: #30363d;
         }
         .btn {
             display: inline-block;
-            padding: 10px 20px;
-            font-size: 16px;
+            padding: 11px 20px;
+            font-size: 13px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.7px;
             border-radius: 5px;
             cursor: pointer;
             border: none;
+            border-bottom: 3px solid rgba(0, 0, 0, 0.28);
             color: #ffffff;
             text-align: center;
-            transition: background-color 0.3s, transform 0.3s;
+            transition: opacity 0.2s, transform 0.1s;
             width: 100%;
             margin: 5px 0;
         }
         
         .btn-primary {
             width: 100%;
-            height: 38px;
+            height: 42px;
             border: none;
+            border-bottom: 3px solid #1b5e20;
             outline: none;
             color: #fff;
-            background: #111;
+            background: #2e7d32;
             cursor: pointer;
             position: relative;
             z-index: 0;
             border-radius: 5px;
         }
         
-        .btn-primary:before {
-            content: '';
-            background: linear-gradient(45deg, #ff0000, #ff7300, #fffb00, #48ff00, #00ffd5, #002bff, #7a00ff, #ff00c8, #ff0000);
-            position: absolute;
-            top: -2px;
-            left:-2px;
-            background-size: 600%;
-            z-index: -1;
-            filter: blur(7px);
-            width: calc(100% + 4px);
-            height: calc(100% + 4px);
-            animation: glowing 20s linear infinite;
-            opacity: 0;
-            transition: opacity .3s ease-in-out;
-            border-radius: 10px;
+        .btn-primary:hover {
+            background: #1b5e20;
         }
         
         .btn-primary:active {
             color: #ffffff;
             font-weight: bold;
-        }
-        
-        .btn-primary:active:after {
-            background: transparent;
-        }
-        
-        .btn-primary:hover:before {
-            opacity: 1;
-        }
-        
-        .btn-primary:after {
-            z-index: -1;
-            content: '';
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            background: #111;
-            left: 0;
-            top: 0;
-            border-radius: 10px;
-        }
-        
-        @keyframes glowing {
-            0% { background-position: 0 0; }
-            50% { background-position: 400% 0; }
-            100% { background-position: 0 0; }
+            transform: translateY(1px);
         }
         
         .btn-secondary {
-            background-color: #6c757d;
+            background-color: #455a64;
         }
         .btn-secondary:hover {
-            background-color: #5a6268;
-            transform: scale(1.05);
+            background-color: #37474f;
         }
         .btn-warning {
-            background-color: #ffc107;
-            color: #212529;
+            background-color: #ef6c00;
+            color: #ffffff;
         }
         .btn-warning:hover {
-            background-color: #e0a800;
-            transform: scale(1.05);
+            background-color: #e65100;
         }
-        /* Cores adicionais para garantir que cada botão tenha uma cor diferente */
+        /* Cores industriais dedicadas por função */
         .btn-creditos {
-            background-color: #ea0b0b; /* Vermelho */
+            background-color: #37474f; /* Grafite industrial */
         }
         .btn-creditos:hover {
-            background-color: #7d0909;
-            transform: scale(1.05);
+            background-color: #263238;
         }
         .btn-dark-mode {
-            background-color: rgb(234, 161, 15); /* Laranja/Dourado */
+            background-color: #ef6c00; /* Âmbar segurança */
         }
         .btn-dark-mode:hover {
-            background-color: #8e5204;
-            transform: scale(1.05);
+            background-color: #e65100;
         }
         .text-danger {
-            color: #dc3545;
+            color: #c62828;
+            font-size: 13px;
+            font-weight: 700;
             margin-top: 10px;
+            min-height: 18px;
         }
 /* Estilos para o rodapé */
 .footer {
     width: 100%;
-    background-color: #ee641a;
-    color: white;
+    background-color: #1e272e;
+    border-top: 3px solid #e65100;
+    color: #cfd8dc;
     text-align: center;
     padding: 10px 0;
-    font-size: 14px;
+    font-size: 12px;
+    font-weight: 600;
     margin-top: auto; /* Mantém o rodapé no final da página sem fixá-lo */
 }
             .theme-toggle {
-            margin: 10px 0;
+            margin: 4px 0 0 0;
         }
     </style>
     </head>
     <body>
         <div class="login-container" role="form" aria-labelledby="loginTitle">
-            <h2 id="loginTitle" class="login-title">Faça o Login</h2>
+            <h2 id="loginTitle" class="login-title">Acesso Supervisório</h2>
             <form action="/login" method="post"
                 onsubmit="storeLoginData(event)">
                 <div class="form-group">
@@ -242,7 +236,7 @@ body {
 
             <div class="theme-toggle">
                 <button onclick="toggleDarkMode()" class="btn btn-dark-mode"
-                    aria-label="Ativar modo noturno">Modo Noturno</button>
+                    aria-label="Ativar modo noturno">🌓 Modo Noturno</button>
             </div>
         </div>
         <div class="footer" role="contentinfo">
